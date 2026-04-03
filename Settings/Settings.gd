@@ -1,0 +1,114 @@
+## Settings.gd — Global game settings autoload singleton.
+##
+## This script is registered as an Autoload (Project Settings > Autoload)
+## so it is available everywhere via the `Settings` name.
+## All tunable game parameters live here.
+
+extends Node
+
+# ===================== PLAYER =====================
+
+## Movement speed in pixels per second.
+var player_speed: float = 200.0
+
+## Radius of the player's collision shape (pixels).
+var player_radius: float = 12.0
+
+## Player visual colour.
+var player_colour: Color = Color.BLUE
+
+# ===================== SHOOTING =====================
+
+## Maximum bullets the player can hold.
+var max_ammo: int = 5
+
+## Seconds to fully regenerate one bullet (when ammo < max).
+var ammo_regen_time: float = 1.5
+
+## Speed of bullets in pixels per second.
+var bullet_speed: float = 400.0
+
+## Bullet radius (collision + visual).
+var bullet_radius: float = 4.0
+
+## Bullet colour.
+var bullet_colour: Color = Color.ORANGE_RED
+
+## How many hits to kill an enemy.
+var enemy_hp: int = 2
+
+# ===================== ENEMIES =====================
+
+## Number of enemies to spawn.
+var enemy_count: int = 4
+
+## Enemy radius (collision + visual).
+var enemy_radius: float = 14.0
+
+## Enemy colour.
+var enemy_colour: Color = Color.RED
+
+## Enemy movement speed (pixels per second).
+var enemy_speed: float = 60.0
+
+## Seconds between enemy direction changes.
+var enemy_change_dir_time: float = 1.5
+
+# ===================== COINS =====================
+
+## Score added per collected coin.
+var coin_value: int = 1
+
+## Radius of each coin's collision shape (pixels).
+var coin_radius: float = 10.0
+
+## Coin visual colour.
+var coin_colour: Color = Color.GOLD
+
+## Total coins the player must collect before the exit opens.
+## -1 = auto-detect from spawned count.
+var required_coins: int = -1
+
+# ===================== EXIT =====================
+
+## Half-extent (radius) of the exit's Area2D collision shape.
+var exit_extent: float = 16.0
+
+## Exit colour when locked (not all coins collected).
+var exit_colour_locked: Color = Color(0.4, 0.4, 0.4)
+
+## Exit colour when unlocked (ready to use).
+var exit_colour_unlocked: Color = Color.GREEN
+
+# ===================== DISPLAY =====================
+
+## Message shown when the player wins.
+var win_message: String = "You escaped! Well done!"
+
+## Seconds to wait before restarting after the win message.
+var restart_delay: float = 3.0
+
+# ===================== WALLS =====================
+
+## Wall tile size in pixels (used by the TileMap).
+var wall_tile_size: int = 32
+
+## Wall tile colour.
+var wall_colour: Color = Color(0.35, 0.35, 0.45)
+
+# ===================== AUDIO =====================
+
+## Master volume (0.0 – 1.0).
+var audio_volume: float = 0.5
+
+## Shoot sound duration (seconds).
+var shoot_sound_duration: float = 0.1
+
+## Shoot sound frequency (Hz).
+var shoot_sound_frequency: float = 880.0
+
+## Step sound duration per footstep (seconds).
+var step_sound_duration: float = 0.08
+
+## Step sound frequency (Hz).
+var step_sound_frequency: float = 150.0
