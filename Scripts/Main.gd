@@ -1,41 +1,40 @@
 ## Main.gd — Level controller with procedural maze generation,
-## shooting, enemies, and coin competition.
+## shooting, enemies, coin competition, and multi-level progression.
 ##
 ## Generates a random maze via Recursive Backtracker (DFS),
 ## removes dead ends for multiple paths.  Walls are solid
 ## (StaticBody2D).  Enemies roam and collect coins.  The HUD
-## shows coins, score, and ammo.  On exit the game freezes
-## and shows the final score.
+## shows level, coins, enemies, score, and ammo.  A Camera2D
+## follows the player.
 
 extends Node2D
 
 # ---------------------------------------------------------------------------
 # Grid constants — must be odd for the cell/wall layout to work.
-# 31 columns × 21 rows → 992 × 672 px viewport.
 # ---------------------------------------------------------------------------
-const MAZE_COLS: int = 31
-const MAZE_ROWS: int = 21
-
-## How many coins to scatter on walkable tiles.
-const NUM_COINS: int = 10
+const MAZE_COLS: int = 21
+const MAZE_ROWS: int = 15
 
 # Cell coordinates (not grid).  Cell (0,0) → grid (1,1).
 const PLAYER_SPAWN: Vector2i = Vector2i(0, 0)
-const EXIT_CELL: Vector2i = Vector2i(14, 9)
+const EXIT_CELL: Vector2i = Vector2i(9, 6)
 
 # ---------------------------------------------------------------------------
 # State
 # ---------------------------------------------------------------------------
-var _maze: Array = []                    # 2-D array: 1 = wall, 0 = walkable
+var _maze: Array = []
 var _player: CharacterBody2D
 var _exit_node: Area2D
 var _coins: Array[Node2D] = []
+var _enemies: Array[Node2D] = []
 var _coins_collected: int = 0
 var _total_coins: int = 0
+var _total_enemies: int = 0
 var _game_over: bool = false
 
 var _hud_label: Label
 var _ammo_label: Label
+var _camera: Camera2D
 
 # Walkable positions in pixel space (cached for enemy AI).
 var _walkable_positions: Array[Vector2] = []
@@ -52,6 +51,7 @@ func _ready() -> void:
 	_generate_maze()
 	_build_walls()
 	_cache_walkable_positions()
+	_setup_camera()
 	_spawn_player()
 	_spawn_coins()
 	_spawn_enemies()
@@ -59,6 +59,7 @@ func _ready() -> void:
 	_create_hud()
 
 	_total_coins = _coins.size()
+	_total_enemies = _enemies.size()
 	Settings.required_coins = _total_coins
 	_update_hud()
 
@@ -83,7 +84,6 @@ func _load_packed_scenes() -> void:
 # =====================================================================
 
 func _generate_maze() -> void:
-	# 1. Fill with walls.
 	_maze = []
 	for row in range(MAZE_ROWS):
 		var r: Array = []
@@ -94,7 +94,6 @@ func _generate_maze() -> void:
 	var cell_cols: int = (MAZE_COLS - 1) / 2
 	var cell_rows: int = (MAZE_ROWS - 1) / 2
 
-	# 2. Recursive Backtracker (iterative DFS).
 	var visited: Array = []
 	for row in range(cell_rows):
 		visited.append([])
@@ -250,7 +249,7 @@ func _create_tileset(tile_size: int) -> TileSet:
 
 
 # =====================================================================
-# Cached walkable positions (pixel space)
+# Cached walkable positions
 # =====================================================================
 
 func _cache_walkable_positions() -> void:
@@ -265,6 +264,30 @@ func get_walkable_positions() -> Array[Vector2]:
 
 
 # =====================================================================
+# Camera
+# =====================================================================
+
+func _setup_camera() -> void:
+	_camera = Camera2D.new()
+	_camera.name = "Camera"
+	_camera.position_smoothing_enabled = true
+	_camera.position_smoothing_speed = 8.0
+	_camera.zoom = Vector2(Settings.camera_zoom, Settings.camera_zoom)
+
+	# Set limits so camera doesn't scroll beyond maze edges.
+	var maze_w: float = MAZE_COLS * Settings.wall_tile_size
+	var maze_ht: float = MAZE_ROWS * Settings.wall_tile_size
+	var vp_size: Vector2 = get_viewport_rect().size
+	var half_vp: Vector2 = vp_size / 2.0
+	_camera.limit_left = -half_vp.x + Settings.wall_tile_size
+	_camera.limit_top = -half_vp.y + Settings.wall_tile_size
+	_camera.limit_right = maze_w + half_vp.x - Settings.wall_tile_size
+	_camera.limit_bottom = maze_ht + half_vp.y - Settings.wall_tile_size
+
+	add_child(_camera)
+
+
+# =====================================================================
 # Entity spawning
 # =====================================================================
 
@@ -272,8 +295,11 @@ func _spawn_player() -> void:
 	_player = _player_scene.instantiate()
 	_player.position = _cell_to_pixel(PLAYER_SPAWN)
 	add_child(_player)
-	# Connect bullet-fired signal so Main can track bullets.
 	_player.bullet_fired.connect(_on_bullet_fired)
+
+	# Camera follows player.
+	_camera.make_current()
+	_camera.global_position = _player.global_position
 
 
 func _on_bullet_fired(bullet: Area2D) -> void:
@@ -289,6 +315,7 @@ func _on_bullet_hit(enemy_node: Node2D) -> void:
 
 
 func _spawn_coins() -> void:
+	var count: int = LevelManager.get_coin_count()
 	var walkable_grid: Array[Vector2i] = []
 	var spawn_grid: Vector2i = Vector2i(
 		PLAYER_SPAWN.x * 2 + 1, PLAYER_SPAWN.y * 2 + 1
@@ -306,7 +333,7 @@ func _spawn_coins() -> void:
 				walkable_grid.append(gp)
 
 	walkable_grid.shuffle()
-	var count: int = min(NUM_COINS, walkable_grid.size())
+	count = min(count, walkable_grid.size())
 	for i in range(count):
 		var coin: Node2D = _coin_scene.instantiate()
 		coin.position = _grid_to_pixel(walkable_grid[i])
@@ -315,12 +342,12 @@ func _spawn_coins() -> void:
 
 
 func _spawn_enemies() -> void:
+	var count: int = LevelManager.get_enemy_count()
 	var blocked: Array[Vector2i] = [
 		Vector2i(PLAYER_SPAWN.x * 2 + 1, PLAYER_SPAWN.y * 2 + 1),
 		Vector2i(EXIT_CELL.x * 2 + 1, EXIT_CELL.y * 2 + 1),
 	]
 
-	# Collect walkable grid cells.
 	var candidates: Array[Vector2i] = []
 	for row in range(MAZE_ROWS):
 		for col in range(MAZE_COLS):
@@ -330,23 +357,31 @@ func _spawn_enemies() -> void:
 					candidates.append(gp)
 
 	candidates.shuffle()
-	var count: int = min(Settings.enemy_count, candidates.size())
+	count = min(count, candidates.size())
 
 	for i in range(count):
 		var enemy: Node2D = _enemy_scene.instantiate()
 		enemy.position = _grid_to_pixel(candidates[i])
+		_enemies.append(enemy)
 		add_child(enemy)
-		# When enemy collects a coin, handle it.
 		enemy.enemy_collected_coin.connect(_on_enemy_collected_coin)
+		enemy.enemy_died.connect(_on_enemy_died)
 
 
 func _on_enemy_collected_coin(coin_node: Node2D) -> void:
 	if _game_over or not is_instance_valid(coin_node):
 		return
-	# Remove coin — enemy "ate" it, player can't get it.
 	coin_node.queue_free()
 	_coins.erase(coin_node)
 	_total_coins = _coins.size()
+	_update_hud()
+
+
+func _on_enemy_died() -> void:
+	if _game_over:
+		return
+	LevelManager.add_score(Settings.score_per_kill)
+	_total_enemies -= 1
 	_update_hud()
 
 
@@ -363,7 +398,7 @@ func _spawn_exit() -> void:
 func _create_hud() -> void:
 	_hud_label = Label.new()
 	_hud_label.position = Vector2(16, 8)
-	_hud_label.add_theme_font_size_override("font_size", 20)
+	_hud_label.add_theme_font_size_override("font_size", 18)
 	_hud_label.add_theme_color_override("font_color", Color.WHITE)
 	_hud_label.add_theme_color_override("font_shadow_color", Color.BLACK)
 	_hud_label.add_theme_constant_override("shadow_offset_x", 1)
@@ -371,8 +406,8 @@ func _create_hud() -> void:
 	add_child(_hud_label)
 
 	_ammo_label = Label.new()
-	_ammo_label.position = Vector2(16, 34)
-	_ammo_label.add_theme_font_size_override("font_size", 18)
+	_ammo_label.position = Vector2(16, 32)
+	_ammo_label.add_theme_font_size_override("font_size", 16)
 	_ammo_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.4))
 	_ammo_label.add_theme_color_override("font_shadow_color", Color.BLACK)
 	_ammo_label.add_theme_constant_override("shadow_offset_x", 1)
@@ -381,8 +416,11 @@ func _create_hud() -> void:
 
 
 func _update_hud() -> void:
-	var score: int = _coins_collected * Settings.coin_value
-	_hud_label.text = "Coins: %d / %d    Score: %d" % [_coins_collected, _total_coins, score]
+	var level: int = LevelManager.current_level
+	var score: int = LevelManager.total_score
+	_hud_label.text = "Level: %d  Coins: %d / %d  Enemies: %d  Score: %d" % [
+		level, _coins_collected, _total_coins, _total_enemies, score
+	]
 
 	if _player != null and is_instance_valid(_player):
 		var ammo: int = _player.get_ammo()
@@ -390,7 +428,7 @@ func _update_hud() -> void:
 		var regen: float = _player.get_regen_remaining()
 
 		if regen > 0.0 and ammo < max_ammo:
-			_ammo_label.text = "Ammo: %d / %d  (reloading %.1fs)" % [ammo, max_ammo, regen]
+			_ammo_label.text = "Ammo: %d / %d  (reload %.1fs)" % [ammo, max_ammo, regen]
 		else:
 			_ammo_label.text = "Ammo: %d / %d" % [ammo, max_ammo]
 
@@ -398,6 +436,8 @@ func _update_hud() -> void:
 func _process(_delta: float) -> void:
 	if not _game_over:
 		_update_hud()
+		if _player != null and is_instance_valid(_player):
+			_camera.global_position = _player.global_position
 
 
 # =====================================================================
@@ -406,6 +446,9 @@ func _process(_delta: float) -> void:
 
 func get_coins() -> Array[Node2D]:
 	return _coins
+
+func get_enemies() -> Array[Node2D]:
+	return _enemies
 
 
 # =====================================================================
@@ -431,15 +474,40 @@ func _on_exit() -> void:
 	_game_over = true
 
 	_player.set_physics_process(false)
-	_show_win_screen()
+
+	if LevelManager.advance_level():
+		_show_level_complete_screen()
+	else:
+		_show_win_screen()
 
 	await get_tree().create_timer(Settings.restart_delay).timeout
+	if LevelManager.is_game_complete():
+		LevelManager.reset_progress()
 	get_tree().reload_current_scene()
 
 
-func _show_win_screen() -> void:
-	var score: int = _coins_collected * Settings.coin_value
+func _show_level_complete_screen() -> void:
+	var overlay := ColorRect.new()
+	overlay.color = Color(0, 0, 0, 0.5)
+	overlay.position = Vector2.ZERO
+	overlay.size = get_viewport_rect().size
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(overlay)
 
+	var label := Label.new()
+	label.text = "Level %d complete!\nScore: %d\n\nNext level..." % [
+		LevelManager.current_level - 1, LevelManager.total_score
+	]
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.position = Vector2.ZERO
+	label.size = get_viewport_rect().size
+	label.add_theme_font_size_override("font_size", 36)
+	label.add_theme_color_override("font_color", Color.GOLD)
+	add_child(label)
+
+
+func _show_win_screen() -> void:
 	var overlay := ColorRect.new()
 	overlay.color = Color(0, 0, 0, 0.6)
 	overlay.position = Vector2.ZERO
@@ -448,7 +516,9 @@ func _show_win_screen() -> void:
 	add_child(overlay)
 
 	var label := Label.new()
-	label.text = "%s\nScore: %d\n\nRestarting..." % [Settings.win_message, score]
+	label.text = "%s\nFinal Score: %d\n\nRestarting..." % [
+		Settings.win_message, LevelManager.total_score
+	]
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.position = Vector2.ZERO

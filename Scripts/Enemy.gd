@@ -2,18 +2,20 @@
 ##
 ## Picks a random walkable cell and moves toward it.  On arrival
 ## (or timeout) picks a new target.  Can pick up coins on overlap.
-## Takes Settings.enemy_hp hits to die.
+## Takes Settings.enemy_hp hits to die.  Emits `enemy_died` on death.
 ##
 ## Scene structure (Enemy.tscn):
 ##   Enemy (CharacterBody2D) — this script
 ##   ├─ Sprite (ColorRect)
-##   ├─ CollisionShape2D
-##   └─ HP_Bar (ProgressBar, hidden until hit)
+##   └─ CollisionShape2D
 
 extends CharacterBody2D
 
 ## Emitted when the enemy picks up a coin.
 signal enemy_collected_coin(coin_node: Node2D)
+
+## Emitted when the enemy is killed.
+signal enemy_died()
 
 var _hp: int = Settings.enemy_hp
 var _max_hp: int = Settings.enemy_hp
@@ -61,6 +63,7 @@ func take_damage() -> void:
 	_flash()
 
 	if _hp <= 0:
+		enemy_died.emit()
 		queue_free()
 
 

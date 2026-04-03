@@ -13,10 +13,17 @@ A 2D top-down maze game built with **Godot 4.2+**. Collect all coins, shoot roam
 - **Стрельба** — игрок стреляет пулями в направлении последнего движения (пробел), ограниченное количество патронов с авторегенерацией.
 - **Система здоровья врагов** — враги погибают с 2 попаданий (настраивается).
 - **Выход** — дверь/портал, открывается (становится зелёным) только после сбора всех монет.
-- **Условие победы** — собери все монеты и доберись до выхода; после победы появляется сообщение и автоматический перезапуск.
-- **HUD** — отображение количества монет, очков и текущего боезапаса с таймером перезарядки.
+- **HUD** — отображение текущего уровня, монет (собрано / всего на карте), оставшихся врагов, суммарных очков и боезапаса с таймером перезарядки.
+- **Система уровней (10 уровней)** — для перехода на следующий уровень нужно собрать все монеты; убивать врагов необязательно. Очки за убийства врагов сохраняются между уровнями. С каждым уровнем растёт количество монет и врагов.
+- **Экран завершения уровня** — при выходе на собранном уровне показывается сообщение с текущим счётом, затем загружается следующий уровень.
+- **Финальный экран победы** — после прохождения 10-го уровня появляется итоговый счёт.
+- **Камера (Camera2D)** — камера плавно следует за игроком; весь лабиринт не виден целиком, что создаёт эффект исследования.
+- **Увеличен размер окна** — viewport изменён с `992×672` на `1280×720` (`project.godot`), чтобы лабиринт не помещался на экране целиком.
+- **Зум камеры** — камера отдалена от игрока через `Settings.camera_zoom` (по умолчанию 0.75), чтобы видеть больше лабиринта.
+- **Уменьшенный размер лабиринта** — для ускорения тестирования лабиринт уменьшен (21×15 клеток), настраивается через `MAZE_COLS` / `MAZE_ROWS` в `Main.gd`.
 - **Звуковая система** — процедурно генерируемые звуковые эффекты (выстрел, шаги) через `AudioStreamGenerator`, без внешних аудиофайлов.
-- **Централизованные настройки** — все параметры игры вынесены в `Settings/Settings.gd` (скорости, размеры, цвета, аудио и т.д.).
+- **Централизованные настройки** — все параметры игры вынесены в `Settings/Settings.gd` (скорости, размеры, цвета, аудио, количество уровней, параметры миникарты и т.д.).
+- **LevelManager (autoload)** — хранит текущий уровень и суммарные очки между перезапусками сцены.
 - **Solid collision system** — стены непробиваемы, игрок не может выйти за пределы лабиринта.
 - **Мёртвые тупики удалены** — в лабиринте всегда есть несколько путей.
 
@@ -47,7 +54,8 @@ A 2D top-down maze game built with **Godot 4.2+**. Collect all coins, shoot roam
 ├── README.md               # This file
 ├── Settings/
 │   ├── Settings.gd         # Global settings autoload singleton
-│   └── SoundManager.gd     # Procedural sound effects (no external audio files)
+│   ├── SoundManager.gd     # Procedural sound effects (no external audio files)
+│   └── LevelManager.gd     # Persistent state: current level, cumulative score
 ├── Scenes/
 │   ├── Main.tscn           # Root level scene
 │   ├── Player.tscn         # Player character
@@ -56,12 +64,12 @@ A 2D top-down maze game built with **Godot 4.2+**. Collect all coins, shoot roam
 │   ├── Bullet.tscn         # Projectile
 │   └── Enemy.tscn          # Roaming enemy
 ├── Scripts/
-│   ├── Main.gd             # Level controller, maze generation, game flow, HUD
+│   ├── Main.gd             # Level controller, maze generation, camera, HUD, multi-level
 │   ├── Player.gd           # Movement, shooting, ammo, coin detection, sounds
 │   ├── Coin.gd             # Coin visual/collision setup
 │   ├── Exit.gd             # Exit logic — locked/unlocked
 │   ├── Bullet.gd           # Projectile movement and hit detection
-│   └── Enemy.gd            # Random-walk AI, coin collection, health
+│   └── Enemy.gd            # Random-walk AI, coin collection, health, death signal
 └── Assets/                 # Place custom assets here (unused — procedural)
 ```
 
@@ -70,7 +78,18 @@ A 2D top-down maze game built with **Godot 4.2+**. Collect all coins, shoot roam
 ## Gameplay
 
 ### Objective
-Collect **all coins** scattered across the maze. The exit door turns **green** when every coin is collected. Step on the exit to win.
+Collect **all coins** scattered across the maze. The exit door turns **green** when every coin is collected. Step on the exit to advance to the next level.
+
+### Levels
+- The game has **10 levels** in total.
+- Each level generates a new random maze.
+- **Coin count** and **enemy count** increase with each level.
+- Your **score persists** across levels — killing enemies adds to your total.
+- After level 10 you see the final victory screen with your total score.
+
+### Scoring
+- Each coin collected: **+1 point** (configurable via `Settings.coin_value`).
+- Each enemy killed: **+5 points** (configurable via `Settings.score_per_kill`).
 
 ### Shooting
 - Press **Space** to fire a bullet toward your last movement direction.
@@ -96,14 +115,15 @@ Collect **all coins** scattered across the maze. The exit door turns **green** w
 ### Main.tscn
 ```
 Main (Node2D) — Main.gd
-  ├─ TileMap           (wall visuals, runtime)
-  ├─ Walls (StaticBody2D)  (wall collision, runtime)
-  ├─ Player            (CharacterBody2D, runtime)
-  ├─ Coin × N          (Node2D, runtime)
-  ├─ Enemy × M         (CharacterBody2D, runtime)
-  ├─ Exit              (Area2D, runtime)
-  ├─ HUD (Label)       (coins + score)
-  └─ Ammo (Label)      (ammo count + reload timer)
+  ├─ Camera (Camera2D)            (follows player, smoothed)
+  ├─ TileMap                      (wall visuals, runtime)
+  ├─ Walls (StaticBody2D)         (wall collision, runtime)
+  ├─ Player                       (CharacterBody2D, runtime)
+  ├─ Coin × N                     (Node2D, runtime)
+  ├─ Enemy × M                    (CharacterBody2D, runtime)
+  ├─ Exit                         (Area2D, runtime)
+  ├─ HUD (Label)                  (level, coins, enemies, score)
+  └─ Ammo (Label)                 (ammo count + reload timer)
 ```
 
 ### Player.tscn
@@ -145,13 +165,14 @@ Exit (Area2D) — Exit.gd
 
 ## Signals
 
-| Source   | Signal               | Handler                        | Purpose                               |
-|----------|----------------------|--------------------------------|---------------------------------------|
-| Player   | `coin_collected`     | `Main._on_coin_collected`      | Coin picked up by player              |
-| Player   | `bullet_fired`       | `Main._on_bullet_fired`        | Track bullet for hit events           |
-| Bullet   | `hit_enemy`          | `Main._on_bullet_hit`          | Apply damage to enemy                 |
-| Enemy    | `enemy_collected_coin`| `Main._on_enemy_collected_coin`| Enemy ate a coin                      |
-| Exit     | `exited`             | `Main._on_exit`                | Player wins                           |
+| Source   | Signal               | Handler                                  | Purpose                               |
+|----------|----------------------|------------------------------------------|---------------------------------------|
+| Player   | `coin_collected`     | `Main._on_coin_collected`                | Coin picked up by player              |
+| Player   | `bullet_fired`       | `Main._on_bullet_fired`                  | Track bullet for hit events           |
+| Bullet   | `hit_enemy`          | `Main._on_bullet_hit`                    | Apply damage to enemy                 |
+| Enemy    | `enemy_collected_coin`| `Main._on_enemy_collected_coin`         | Enemy ate a coin                      |
+| Enemy    | `enemy_died`         | `Main._on_enemy_died`                    | Award score, update enemy count       |
+| Exit     | `exited`             | `Main._on_exit`                          | Player advances to next level         |
 
 ---
 
@@ -160,14 +181,23 @@ Exit (Area2D) — Exit.gd
 When the player steps on the exit **after collecting all remaining coins**:
 
 1. Player movement is **frozen**.
-2. A dark overlay + score message appears.
-3. After `Settings.restart_delay` seconds the scene reloads with a **new** maze.
+2. A dark overlay with the level-complete message and current score appears.
+3. After `Settings.restart_delay` seconds the scene reloads with a **new** maze for the next level.
+4. After completing **level 10**, the final victory screen shows your total score, then the game resets to level 1.
 
 ---
 
 ## Settings Reference
 
 All game parameters live in **`Settings/Settings.gd`**.
+
+### Levels
+| Variable           | Type | Default | Description                                |
+|--------------------|------|---------|--------------------------------------------|
+| `max_level`        | int  | `10`    | Total number of levels.                    |
+| `base_coin_count`  | int  | `8`     | Coins on level 1, +2 per subsequent level. |
+| `base_enemy_count` | int  | `3`     | Enemies on level 1, +1 every 2 levels.     |
+| `score_per_kill`   | int  | `5`     | Points awarded per enemy killed.           |
 
 ### Player
 | Variable          | Type   | Default | Description                          |
@@ -210,10 +240,10 @@ All game parameters live in **`Settings/Settings.gd`**.
 | `exit_colour_unlocked` | Color  | `GREEN`  | Colour when exit is usable.     |
 
 ### Display
-| Variable          | Type   | Default | Description                           |
-|-------------------|--------|---------|---------------------------------------|
-| `win_message`     | String | `"..."` | Victory text.                         |
-| `restart_delay`   | float  | `3.0`   | Seconds before auto-restart.          |
+| Variable          | Type   | Default | Description                     |
+|-------------------|--------|---------|---------------------------------|
+| `win_message`     | String | `"..."` | Victory text.                   |
+| `restart_delay`   | float  | `3.0`   | Seconds before auto-restart.    |
 
 ### Walls
 | Variable          | Type   | Default   | Description                     |
@@ -249,12 +279,14 @@ To replace with real audio files:
 
 ## Changing the Maze Size
 
-Edit `MAZE_COLS` / `MAZE_ROWS` in `Scripts/Main.gd` (must be **odd**). Then update `project.godot`:
+Edit `MAZE_COLS` / `MAZE_ROWS` in `Scripts/Main.gd` (must be **odd**). The viewport size in `project.godot` should be **larger** than the maze so the camera can pan around:
 
 ```
-viewport_width  = MAZE_COLS × 32
-viewport_height = MAZE_ROWS × 32
+viewport_width  >= 1280   (or any size larger than a single screen)
+viewport_height >= 720
 ```
+
+To adjust how much of the maze is visible, change the viewport size — the camera follows the player and the maze is intentionally larger than one screen.
 
 ---
 
@@ -266,6 +298,7 @@ Both autoloads are registered in `project.godot`:
 [autoload]
 Settings="*res://Settings/Settings.gd"
 SoundManager="*res://Settings/SoundManager.gd"
+LevelManager="*res://Settings/LevelManager.gd"
 ```
 
 Verify: **Project → Project Settings → Autoload**.

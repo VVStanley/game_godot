@@ -31,3 +31,5 @@ ehthumbs.db
 
 # Logs
 *.log
+
+.qwen

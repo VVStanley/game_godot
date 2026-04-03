@@ -22,11 +22,12 @@ config/features=PackedStringArray("4.6", "Forward Plus")
 
 Settings="*res://Settings/Settings.gd"
 SoundManager="*res://Settings/SoundManager.gd"
+LevelManager="*res://Settings/LevelManager.gd"
 
 [display]
 
-window/size/viewport_width=992
-window/size/viewport_height=672
+window/size/viewport_width=1280
+window/size/viewport_height=720
 window/stretch/mode="canvas_items"
 
 [input]

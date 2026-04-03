@@ -6,6 +6,20 @@
 
 extends Node
 
+# ===================== LEVELS =====================
+
+## Total number of levels in the game.
+var max_level: int = 10
+
+## Base coin count for level 1, increases by 2 per level.
+var base_coin_count: int = 8
+
+## Base enemy count for level 1, increases by 1 every 2 levels.
+var base_enemy_count: int = 3
+
+## Score awarded per enemy kill.
+var score_per_kill: int = 5
+
 # ===================== PLAYER =====================
 
 ## Movement speed in pixels per second.
@@ -87,6 +101,12 @@ var win_message: String = "You escaped! Well done!"
 
 ## Seconds to wait before restarting after the win message.
 var restart_delay: float = 3.0
+
+# ===================== CAMERA =====================
+
+## Camera zoom level.  Lower = more of the maze visible.
+## 1.0 = 1:1 pixel ratio.  0.75 = 25% more area visible.
+var camera_zoom: float = 0.75
 
 # ===================== WALLS =====================
 
