@@ -1,0 +1,216 @@
+# REAME_DEV.md — Technical Documentation
+
+Developer-facing documentation for the "Maze: Coins and Exit" project.
+
+---
+
+## Что сделано
+
+- **Процедурная генерация лабиринта** — каждый запуск создаётся новый лабиринт алгоритмом DFS (Recursive Backtracker).
+- **Игрок** — перемещение по лабиринту (WASD / стрелки), столкновения со стенами.
+- **Монеты** — разбросаны по лабиринту, собираются при касании, подсчёт очков.
+- **Враги** — красные круги, перемещаются случайным образом, могут подбирать монеты.
+- **Стрельба** — игрок стреляет пулями в направлении последнего движения (пробел), ограниченное количество патронов с авторегенерацией.
+- **Система здоровья врагов** — враги погибают с 2 попаданий (настраивается).
+- **Выход** — дверь/портал, открывается (становится зелёным) только после сбора всех монет.
+- **HUD** — отображение текущего уровня, монет (собрано / всего на карте), оставшихся врагов, суммарных очков и боезапаса с таймером перезарядки.
+- **Система уровней (10 уровней)** — для перехода на следующий уровень нужно собрать все монеты; убивать врагов необязательно. Очки за убийства врагов сохраняются между уровнями. С каждым уровнем растёт количество монет и врагов.
+- **Экран завершения уровня** — при выходе на собранном уровне показывается сообщение с текущим счётом, затем загружается следующий уровень.
+- **Финальный экран победы** — после прохождения 10-го уровня появляется итоговый счёт.
+- **Камера (Camera2D)** — камера плавно следует за игроком; весь лабиринт не виден целиком, что создаёт эффект исследования.
+- **Увеличен размер окна** — viewport изменён с `992×672` на `1280×720` (`project.godot`), чтобы лабиринт не помещался на экране целиком.
+- **Зум камеры** — камера отдалена от игрока через `Settings.camera_zoom` (по умолчанию 0.75), чтобы видеть больше лабиринта.
+- **Уменьшенный размер лабиринта** — для ускорения тестирования лабиринт уменьшен (21×15 клеток), настраивается через `MAZE_COLS` / `MAZE_ROWS` в `Main.gd`.
+- **Звуковая система** — процедурно генерируемые звуковые эффекты (выстрел, шаги) через `AudioStreamGenerator`, без внешних аудиофайлов.
+- **Централизованные настройки** — все параметры игры вынесены в `Settings/Settings.gd` (скорости, размеры, цвета, аудио, количество уровней, параметры миникарты и т.д.).
+- **LevelManager (autoload)** — хранит текущий уровень и суммарные очки между перезапусками сцены.
+- **Solid collision system** — стены непробиваемы, игрок не может выйти за пределы лабиринта.
+- **Мёртвые тупики удалены** — в лабиринте всегда есть несколько путей.
+
+---
+
+## Project Structure (Verified)
+
+```
+Qwen_text1/
+├── project.godot                 # Godot 4.6 project config (window 1280×720, input map, autoloads)
+├── README.md                     # Game documentation (how to play, controls, gameplay)
+├── README_DEV.md                 # THIS FILE — technical documentation
+├── export_presets.cfg            # Export presets (unused)
+├── .gitignore                    # Git ignore rules
+├── Settings/
+│   ├── Settings.gd               # Autoload: global tunable parameters (speeds, sizes, colors, audio, levels)
+│   ├── SoundManager.gd           # Autoload: procedural audio (shoot, footstep via AudioStreamGenerator)
+│   └── LevelManager.gd           # Autoload: persistent state (current_level, total_score)
+├── Scenes/
+│   ├── Main.tscn                 # Root level scene (instantiated by Godot on launch)
+│   ├── Player.tscn               # Player character (CharacterBody2D)
+│   ├── Coin.tscn                 # Coin collectible (Node2D)
+│   ├── Exit.tscn                 # Exit door/portal (Area2D)
+│   ├── Bullet.tscn               # Projectile (Area2D)
+│   └── Enemy.tscn                # Roaming enemy (CharacterBody2D)
+├── Scripts/
+│   ├── Main.gd                   # Level controller, maze generation (DFS), camera, HUD, spawning, multi-level logic
+│   ├── Player.gd                 # WASD movement, wall sliding, shooting, ammo regen, coin detection, step sounds
+│   ├── Coin.gd                   # Coin visual/collision setup from Settings
+│   ├── Exit.gd                   # Exit logic — locked/unlocked state, player detection
+│   ├── Bullet.gd                 # Projectile movement, lifetime, wall/enemy collision
+│   └── Enemy.gd                  # Random-walk AI, coin collection, health, flash-on-hit, death signal
+└── Assets/                       # Placeholder directory (unused — all visuals/audio procedural)
+```
+
+### Autoload Registration (project.godot)
+
+```ini
+[autoload]
+Settings="*res://Settings/Settings.gd"
+SoundManager="*res://Settings/SoundManager.gd"
+LevelManager="*res://Settings/LevelManager.gd"
+```
+
+Verify: **Project → Project Settings → Autoload**.
+
+---
+
+## Scene Hierarchies
+
+### Main.tscn
+```
+Main (Node2D) — Main.gd
+  ├─ Camera (Camera2D)            (follows player, smoothed, zoomed)
+  ├─ TileMap                      (wall visuals, runtime-generated)
+  ├─ Walls (StaticBody2D)         (wall collision shapes, runtime)
+  ├─ Player                       (CharacterBody2D, runtime-spawned)
+  ├─ Coin × N                     (Node2D, runtime-spawned)
+  ├─ Enemy × M                    (CharacterBody2D, runtime-spawned)
+  ├─ Exit                         (Area2D, runtime-spawned)
+  ├─ HUD (Label)                  (level, coins, enemies, score)
+  └─ Ammo (Label)                 (ammo count + reload timer)
+```
+
+### Player.tscn
+```
+Player (CharacterBody2D) — Player.gd
+  ├─ Sprite (ColorRect)           (sized from Settings.player_radius)
+  └─ CollisionShape2D             (CircleShape2D, radius from Settings)
+```
+
+### Bullet.tscn
+```
+Bullet (Area2D) — Bullet.gd
+  ├─ Sprite (ColorRect)           (sized from Settings.bullet_radius)
+  └─ CollisionShape2D             (CircleShape2D)
+```
+
+### Enemy.tscn
+```
+Enemy (CharacterBody2D) — Enemy.gd  [group: "enemy"]
+  ├─ Sprite (ColorRect)           (sized from Settings.enemy_radius)
+  └─ CollisionShape2D             (CircleShape2D)
+```
+
+### Coin.tscn
+```
+Coin (Node2D) — Coin.gd
+  ├─ Sprite (ColorRect)           (sized from Settings.coin_radius)
+  └─ CollisionShape2D             (CircleShape2D)
+```
+
+### Exit.tscn
+```
+Exit (Area2D) — Exit.gd
+  ├─ Sprite (ColorRect)           (sized from Settings.exit_extent)
+  └─ CollisionShape2D             (CircleShape2D)
+```
+
+---
+
+## Signals
+
+| Source   | Signal               | Handler                                  | Purpose                               |
+|----------|----------------------|------------------------------------------|---------------------------------------|
+| Player   | `coin_collected`     | `Main._on_coin_collected`                | Coin picked up by player              |
+| Player   | `bullet_fired`       | `Main._on_bullet_fired`                  | Track bullet for hit events           |
+| Bullet   | `hit_enemy`          | `Main._on_bullet_hit`                    | Apply damage to enemy                 |
+| Enemy    | `enemy_collected_coin`| `Main._on_enemy_collected_coin`         | Enemy ate a coin                      |
+| Enemy    | `enemy_died`         | `Main._on_enemy_died`                    | Award score, update enemy count       |
+| Exit     | `exited`             | `Main._on_exit`                          | Player advances to next level         |
+
+---
+
+## Collision Layers
+
+| Layer | Name     | Used by                  |
+|-------|----------|--------------------------|
+| 1     | walls    | Walls (StaticBody2D)     |
+| 2     | player   | Player                   |
+| 3     | (enemy)  | Enemies                  |
+| 5     | (bullet) | Bullets (Area2D)         |
+
+- Player mask: `1` (collides with walls).
+- Enemy mask: `1` (collides with walls).
+- Bullet mask: `1 | 3` (collides with walls + enemies).
+- Exit mask: `2` (detects player body).
+
+---
+
+## Key Implementation Details
+
+### Maze Generation
+- Algorithm: **Recursive Backtracker (DFS)** on a grid of cells.
+- Grid size: `MAZE_COLS=21`, `MAZE_ROWS=15` (must be **odd**).
+- Cell-to-grid mapping: cell `(cx, cy)` → grid `(cx*2+1, cy*2+1)`.
+- Dead ends removed: after generation, each cell with exactly 1 passage has a wall carved to an adjacent open cell (if available).
+
+### Camera
+- Follows player via `_camera.global_position = _player.global_position` in `_process()`.
+- Smoothed: `position_smoothing_speed = 8.0`.
+- Zoom: `Settings.camera_zoom` (default `0.75`).
+- Limits set to maze boundaries so camera doesn't scroll beyond walls.
+
+### Coin Detection
+- Player uses **distance-based** check in `_check_coin_overlaps()` (not Area2D signals).
+- Pick radius: `Settings.player_radius + Settings.coin_radius`.
+- Enemies also use distance-based checks (same formula).
+
+### Ammo Regeneration
+- Uses accumulator: `_regen_accumulator += delta`.
+- When accumulator >= `Settings.ammo_regen_time`, +1 ammo (capped at `Settings.max_ammo`).
+
+### Enemy AI
+- Picks random walkable position within 300px radius.
+- Falls back to any walkable position if none nearby.
+- Direction change timeout: `Settings.enemy_change_dir_time`.
+- Uses `move_and_slide()` for wall collision.
+
+### Multi-Level System
+- `LevelManager` persists `current_level` and `total_score` across scene reloads.
+- Level progression: `advance_level()` returns `false` at max level.
+- After level 10: victory screen → `reset_progress()` → scene reload → level 1.
+- Coin count: `base_coin_count + (level-1) * 2`.
+- Enemy count: `base_enemy_count + (level-1) / 2` (integer division).
+
+### Sound System
+- Procedural sine waves with exponential decay.
+- `SoundManager` uses single `AudioStreamPlayer` — sounds overlap (no queue).
+- Volume: `linear_to_db(Settings.audio_volume)`.
+
+---
+
+## How to Run (Dev)
+
+1. Open the project in **Godot 4.2+** (tested with 4.6).
+2. Press **F5** to run (main scene set to `res://Scenes/Main.tscn`).
+3. Verify autoloads: **Project → Project Settings → Autoload**.
+
+### Changing Maze Size
+Edit `MAZE_COLS` / `MAZE_ROWS` in `Scripts/Main.gd`. Must be **odd** numbers.
+
+### Replacing Procedural Audio
+1. Add `.wav`/`.ogg` files to `Assets/`.
+2. Edit `SoundManager.gd` to load via `load("res://Assets/...")`.
+
+### Replacing Procedural Visuals
+Each entity script (`Player.gd`, `Enemy.gd`, `Coin.gd`, `Exit.gd`, `Bullet.gd`) creates `ColorRect` sprites at runtime. To use sprites:
+1. Add images to `Assets/`.
+2. Replace `ColorRect` with `Sprite2D` in the respective `_apply_settings()` / `_ready()` methods.

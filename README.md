@@ -4,31 +4,6 @@ A 2D top-down maze game built with **Godot 4.2+**. Collect all coins, shoot roam
 
 ---
 
-## Что сделано
-
-- **Процедурная генерация лабиринта** — каждый запуск создаётся новый лабиринт алгоритмом DFS (Recursive Backtracker).
-- **Игрок** — перемещение по лабиринту (WASD / стрелки), столкновения со стенами.
-- **Монеты** — разбросаны по лабиринту, собираются при касании, подсчёт очков.
-- **Враги** — красные круги, перемещаются случайным образом, могут подбирать монеты.
-- **Стрельба** — игрок стреляет пулями в направлении последнего движения (пробел), ограниченное количество патронов с авторегенерацией.
-- **Система здоровья врагов** — враги погибают с 2 попаданий (настраивается).
-- **Выход** — дверь/портал, открывается (становится зелёным) только после сбора всех монет.
-- **HUD** — отображение текущего уровня, монет (собрано / всего на карте), оставшихся врагов, суммарных очков и боезапаса с таймером перезарядки.
-- **Система уровней (10 уровней)** — для перехода на следующий уровень нужно собрать все монеты; убивать врагов необязательно. Очки за убийства врагов сохраняются между уровнями. С каждым уровнем растёт количество монет и врагов.
-- **Экран завершения уровня** — при выходе на собранном уровне показывается сообщение с текущим счётом, затем загружается следующий уровень.
-- **Финальный экран победы** — после прохождения 10-го уровня появляется итоговый счёт.
-- **Камера (Camera2D)** — камера плавно следует за игроком; весь лабиринт не виден целиком, что создаёт эффект исследования.
-- **Увеличен размер окна** — viewport изменён с `992×672` на `1280×720` (`project.godot`), чтобы лабиринт не помещался на экране целиком.
-- **Зум камеры** — камера отдалена от игрока через `Settings.camera_zoom` (по умолчанию 0.75), чтобы видеть больше лабиринта.
-- **Уменьшенный размер лабиринта** — для ускорения тестирования лабиринт уменьшен (21×15 клеток), настраивается через `MAZE_COLS` / `MAZE_ROWS` в `Main.gd`.
-- **Звуковая система** — процедурно генерируемые звуковые эффекты (выстрел, шаги) через `AudioStreamGenerator`, без внешних аудиофайлов.
-- **Централизованные настройки** — все параметры игры вынесены в `Settings/Settings.gd` (скорости, размеры, цвета, аудио, количество уровней, параметры миникарты и т.д.).
-- **LevelManager (autoload)** — хранит текущий уровень и суммарные очки между перезапусками сцены.
-- **Solid collision system** — стены непробиваемы, игрок не может выйти за пределы лабиринта.
-- **Мёртвые тупики удалены** — в лабиринте всегда есть несколько путей.
-
----
-
 ## How to Run
 
 1. Open the project folder in **Godot 4.2+**.
@@ -44,34 +19,6 @@ A 2D top-down maze game built with **Godot 4.2+**. Collect all coins, shoot roam
 | `A` / `←`   | Move left           |
 | `D` / `→`   | Move right          |
 | `Space`     | Shoot (toward facing direction) |
-
----
-
-## Project Structure
-
-```
-├── project.godot           # Godot project config (window, input map, autoloads)
-├── README.md               # This file
-├── Settings/
-│   ├── Settings.gd         # Global settings autoload singleton
-│   ├── SoundManager.gd     # Procedural sound effects (no external audio files)
-│   └── LevelManager.gd     # Persistent state: current level, cumulative score
-├── Scenes/
-│   ├── Main.tscn           # Root level scene
-│   ├── Player.tscn         # Player character
-│   ├── Coin.tscn           # Coin collectible
-│   ├── Exit.tscn           # Exit door/portal
-│   ├── Bullet.tscn         # Projectile
-│   └── Enemy.tscn          # Roaming enemy
-├── Scripts/
-│   ├── Main.gd             # Level controller, maze generation, camera, HUD, multi-level
-│   ├── Player.gd           # Movement, shooting, ammo, coin detection, sounds
-│   ├── Coin.gd             # Coin visual/collision setup
-│   ├── Exit.gd             # Exit logic — locked/unlocked
-│   ├── Bullet.gd           # Projectile movement and hit detection
-│   └── Enemy.gd            # Random-walk AI, coin collection, health, death signal
-└── Assets/                 # Place custom assets here (unused — procedural)
-```
 
 ---
 
@@ -107,72 +54,6 @@ Collect **all coins** scattered across the maze. The exit door turns **green** w
 - **Procedurally generated** each game via Recursive Backtracker (DFS).
 - Dead ends are removed so there are always **multiple paths**.
 - Walls are **solid** — the player cannot pass through them or leave the maze.
-
----
-
-## Scene Hierarchies
-
-### Main.tscn
-```
-Main (Node2D) — Main.gd
-  ├─ Camera (Camera2D)            (follows player, smoothed)
-  ├─ TileMap                      (wall visuals, runtime)
-  ├─ Walls (StaticBody2D)         (wall collision, runtime)
-  ├─ Player                       (CharacterBody2D, runtime)
-  ├─ Coin × N                     (Node2D, runtime)
-  ├─ Enemy × M                    (CharacterBody2D, runtime)
-  ├─ Exit                         (Area2D, runtime)
-  ├─ HUD (Label)                  (level, coins, enemies, score)
-  └─ Ammo (Label)                 (ammo count + reload timer)
-```
-
-### Player.tscn
-```
-Player (CharacterBody2D) — Player.gd
-  ├─ Sprite (ColorRect)
-  └─ CollisionShape2D (CircleShape2D)
-```
-
-### Bullet.tscn
-```
-Bullet (Area2D) — Bullet.gd
-  ├─ Sprite (ColorRect)
-  └─ CollisionShape2D (CircleShape2D)
-```
-
-### Enemy.tscn
-```
-Enemy (CharacterBody2D) — Enemy.gd  [group: "enemy"]
-  ├─ Sprite (ColorRect)
-  └─ CollisionShape2D (CircleShape2D)
-```
-
-### Coin.tscn
-```
-Coin (Node2D) — Coin.gd
-  ├─ Sprite (ColorRect)
-  └─ CollisionShape2D (CircleShape2D)
-```
-
-### Exit.tscn
-```
-Exit (Area2D) — Exit.gd
-  ├─ Sprite (ColorRect)
-  └─ CollisionShape2D (CircleShape2D)
-```
-
----
-
-## Signals
-
-| Source   | Signal               | Handler                                  | Purpose                               |
-|----------|----------------------|------------------------------------------|---------------------------------------|
-| Player   | `coin_collected`     | `Main._on_coin_collected`                | Coin picked up by player              |
-| Player   | `bullet_fired`       | `Main._on_bullet_fired`                  | Track bullet for hit events           |
-| Bullet   | `hit_enemy`          | `Main._on_bullet_hit`                    | Apply damage to enemy                 |
-| Enemy    | `enemy_collected_coin`| `Main._on_enemy_collected_coin`         | Enemy ate a coin                      |
-| Enemy    | `enemy_died`         | `Main._on_enemy_died`                    | Award score, update enemy count       |
-| Exit     | `exited`             | `Main._on_exit`                          | Player advances to next level         |
 
 ---
 
@@ -260,45 +141,18 @@ All game parameters live in **`Settings/Settings.gd`**.
 | `step_sound_duration`    | float  | `0.08`  | Footstep sound length (seconds).     |
 | `step_sound_frequency`   | float  | `150.0` | Footstep tone frequency (Hz).        |
 
+### Camera
+| Variable          | Type   | Default | Description                     |
+|-------------------|--------|---------|---------------------------------|
+| `camera_zoom`     | float  | `0.75`  | Camera zoom level. Lower = more visible. |
+
 ---
 
 ## Sound System
 
-Sounds are **procedurally generated** at runtime by `Settings/SoundManager.gd` using `AudioStreamGenerator`. No external audio files are needed.
+Sounds are **procedurally generated** at runtime. No external audio files are needed.
 
 - **Shoot**: short high-frequency sine burst.
 - **Footstep**: low-frequency thud.
 
-Both are fully configurable via the **Audio** section in `Settings.gd`.
-
-To replace with real audio files:
-1. Add `.wav` or `.ogg` files to `Assets/`.
-2. Edit `SoundManager.gd` to load them via `load("res://Assets/...")`.
-
----
-
-## Changing the Maze Size
-
-Edit `MAZE_COLS` / `MAZE_ROWS` in `Scripts/Main.gd` (must be **odd**). The viewport size in `project.godot` should be **larger** than the maze so the camera can pan around:
-
-```
-viewport_width  >= 1280   (or any size larger than a single screen)
-viewport_height >= 720
-```
-
-To adjust how much of the maze is visible, change the viewport size — the camera follows the player and the maze is intentionally larger than one screen.
-
----
-
-## Autoload Setup
-
-Both autoloads are registered in `project.godot`:
-
-```ini
-[autoload]
-Settings="*res://Settings/Settings.gd"
-SoundManager="*res://Settings/SoundManager.gd"
-LevelManager="*res://Settings/LevelManager.gd"
-```
-
-Verify: **Project → Project Settings → Autoload**.
+All audio is configurable via the **Audio** section in `Settings.gd`.
