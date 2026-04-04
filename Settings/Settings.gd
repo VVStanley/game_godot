@@ -104,9 +104,36 @@ var restart_delay: float = 3.0
 
 # ===================== CAMERA =====================
 
-## Camera zoom level.  Lower = more of the maze visible.
-## 1.0 = 1:1 pixel ratio.  0.75 = 25% more area visible.
-var camera_zoom: float = 0.75
+## Camera zoom level.  Higher = closer to the player (less maze visible).
+## At 4.0 the player sees ~10 tiles horizontally and ~5.6 vertically
+## (1280×720 viewport, 32px tiles).  The maze extends far beyond the screen.
+var camera_zoom: float = 4.0
+
+# ===================== MINIMAP =====================
+
+## Show the minimap (true/false).
+var minimap_enabled: bool = true
+
+## Maximum width of the minimap on screen (pixels).
+var minimap_max_width: float = 150.0
+
+## Padding from the bottom-right corner (pixels).
+var minimap_padding: float = 12.0
+
+## Size of the player dot on the minimap (pixels).
+var minimap_player_dot_size: float = 8.0
+
+## Opacity of the minimap background (0.0–1.0).
+var minimap_bg_opacity: float = 0.8
+
+## Minimap wall colour — distinct from main game walls for contrast.
+var minimap_wall_colour: Color = Color(0.65, 0.65, 0.75)
+
+## Fog of war — unrevealed tiles use this colour.
+var minimap_fog_colour: Color = Color(0.05, 0.05, 0.08, 0.95)
+
+## Radius (in grid cells) around the player that gets revealed.
+var minimap_reveal_radius: int = 2
 
 # ===================== WALLS =====================
 

@@ -35,6 +35,11 @@ var _game_over: bool = false
 var _hud_label: Label
 var _ammo_label: Label
 var _camera: Camera2D
+var _hud_layer: CanvasLayer
+
+# Minimap
+var _minimap: MinimapControl
+var _minimap_player_pos: Vector2
 
 # Walkable positions in pixel space (cached for enemy AI).
 var _walkable_positions: Array[Vector2] = []
@@ -56,7 +61,9 @@ func _ready() -> void:
 	_spawn_coins()
 	_spawn_enemies()
 	_spawn_exit()
+	_setup_hud_layer()
 	_create_hud()
+	_create_minimap()
 
 	_total_coins = _coins.size()
 	_total_enemies = _enemies.size()
@@ -264,6 +271,17 @@ func get_walkable_positions() -> Array[Vector2]:
 
 
 # =====================================================================
+# HUD CanvasLayer — screen-space overlay that follows the camera
+# =====================================================================
+
+func _setup_hud_layer() -> void:
+	_hud_layer = CanvasLayer.new()
+	_hud_layer.name = "HUDLayer"
+	_hud_layer.layer = 10
+	add_child(_hud_layer)
+
+
+# =====================================================================
 # Camera
 # =====================================================================
 
@@ -398,21 +416,21 @@ func _spawn_exit() -> void:
 func _create_hud() -> void:
 	_hud_label = Label.new()
 	_hud_label.position = Vector2(16, 8)
-	_hud_label.add_theme_font_size_override("font_size", 18)
+	_hud_label.add_theme_font_size_override("font_size", 20)
 	_hud_label.add_theme_color_override("font_color", Color.WHITE)
 	_hud_label.add_theme_color_override("font_shadow_color", Color.BLACK)
 	_hud_label.add_theme_constant_override("shadow_offset_x", 1)
 	_hud_label.add_theme_constant_override("shadow_offset_y", 1)
-	add_child(_hud_label)
+	_hud_layer.add_child(_hud_label)
 
 	_ammo_label = Label.new()
-	_ammo_label.position = Vector2(16, 32)
-	_ammo_label.add_theme_font_size_override("font_size", 16)
+	_ammo_label.position = Vector2(16, 36)
+	_ammo_label.add_theme_font_size_override("font_size", 18)
 	_ammo_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.4))
 	_ammo_label.add_theme_color_override("font_shadow_color", Color.BLACK)
 	_ammo_label.add_theme_constant_override("shadow_offset_x", 1)
 	_ammo_label.add_theme_constant_override("shadow_offset_y", 1)
-	add_child(_ammo_label)
+	_hud_layer.add_child(_ammo_label)
 
 
 func _update_hud() -> void:
@@ -433,9 +451,161 @@ func _update_hud() -> void:
 			_ammo_label.text = "Ammo: %d / %d" % [ammo, max_ammo]
 
 
+# =====================================================================
+# Minimap — custom Control drawn in screen space, bottom-right
+# =====================================================================
+
+func _create_minimap() -> void:
+	if not Settings.minimap_enabled:
+		return
+
+	var tile_size: int = Settings.wall_tile_size
+	var maze_w: int = MAZE_COLS * tile_size
+	var maze_h: int = MAZE_ROWS * tile_size
+
+	var max_w: float = Settings.minimap_max_width
+	var scale_factor: float = max_w / float(maze_w)
+	var minimap_w: int = int(ceil(float(maze_w) * scale_factor))
+	var minimap_h: int = int(ceil(float(maze_h) * scale_factor))
+
+	_minimap = MinimapControl.new()
+	_minimap.custom_minimum_size = Vector2(minimap_w, minimap_h)
+	_minimap.maze_cols = MAZE_COLS
+	_minimap.maze_rows = MAZE_ROWS
+	_minimap.maze_data = _maze.duplicate(true)
+	_minimap.scale_factor = scale_factor
+	_minimap.exit_unlocked = false
+
+	var vp_size: Vector2 = get_viewport_rect().size
+	_minimap.position = Vector2(
+		vp_size.x - minimap_w - Settings.minimap_padding,
+		vp_size.y - minimap_h - Settings.minimap_padding
+	)
+	_hud_layer.add_child(_minimap)
+
+	# Reveal initial area around the player.
+	_reveal_around_player()
+
+
+## Update the minimap player dot position and reveal fog.
+func _update_minimap_player() -> void:
+	if _minimap != null and _player != null:
+		_minimap.player_pos = _player.global_position
+		_reveal_around_player()
+
+
+## Reveal tiles around the player's current position on the minimap.
+func _reveal_around_player() -> void:
+	if _minimap == null or _player == null:
+		return
+
+	var tile_size: float = float(Settings.wall_tile_size)
+	var px: int = int(floor(_player.global_position.x / tile_size))
+	var py: int = int(floor(_player.global_position.y / tile_size))
+	var radius: int = Settings.minimap_reveal_radius
+
+	for dy in range(-radius, radius + 1):
+		for dx in range(-radius, radius + 1):
+			var gx: int = px + dx
+			var gy: int = py + dy
+			if gx >= 0 and gx < MAZE_COLS and gy >= 0 and gy < MAZE_ROWS:
+				_minimap.reveal_tile(gx, gy)
+
+
+## Minimal Control that draws the maze and player dot via _draw().
+class MinimapControl extends Control:
+	var maze_data: Array = []
+	var maze_cols: int = 0
+	var maze_rows: int = 0
+	var scale_factor: float = 1.0
+	var player_pos: Vector2 = Vector2.ZERO
+	var exit_unlocked: bool = false
+
+	# Fog of war — 2D grid: true = revealed, false = hidden.
+	var _revealed: Array = []
+
+	func init_fog() -> void:
+		_revealed = []
+		for row in range(maze_rows):
+			var r: Array = []
+			for col in range(maze_cols):
+				r.append(false)
+			_revealed.append(r)
+
+	func reveal_tile(col: int, row: int) -> void:
+		if col >= 0 and col < maze_cols and row >= 0 and row < maze_rows:
+			if not _revealed[row][col]:
+				_revealed[row][col] = true
+				queue_redraw()
+
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		init_fog()
+		set_process(true)
+
+	func _process(_delta: float) -> void:
+		queue_redraw()
+
+	func _draw() -> void:
+		var ts: float = float(Settings.wall_tile_size)
+		var bg_color: Color = Color(0.0, 0.0, 0.0, Settings.minimap_bg_opacity)
+		var wall_color: Color = Settings.minimap_wall_colour
+		var floor_color: Color = Color(0.12, 0.12, 0.16, Settings.minimap_bg_opacity)
+		var fog_color: Color = Settings.minimap_fog_colour
+
+		# Background.
+		var maze_w: float = float(maze_cols) * ts * scale_factor
+		var maze_h: float = float(maze_rows) * ts * scale_factor
+		draw_rect(Rect2(Vector2.ZERO, Vector2(maze_w, maze_h)), bg_color)
+
+		# Draw floor and wall tiles (only if revealed).
+		for row in range(maze_rows):
+			for col in range(maze_cols):
+				var x: float = float(col) * ts * scale_factor
+				var y: float = float(row) * ts * scale_factor
+				var w: float = ts * scale_factor
+				var h: float = ts * scale_factor
+				var rect: Rect2 = Rect2(Vector2(x, y), Vector2(w, h))
+
+				if _revealed[row][col]:
+					if maze_data[row][col] == 1:
+						draw_rect(rect, wall_color)
+					else:
+						draw_rect(rect, floor_color)
+				else:
+					draw_rect(rect, fog_color)
+
+		# Player dot.
+		var dot_size: float = Settings.minimap_player_dot_size
+		var dot_rect: Rect2 = Rect2(
+			player_pos.x * scale_factor - dot_size / 2.0,
+			player_pos.y * scale_factor - dot_size / 2.0,
+			dot_size,
+			dot_size
+		)
+		draw_rect(dot_rect, Settings.player_colour)
+
+		# Exit marker — grey when locked, green when unlocked.
+		var exit_cell_x: float = 9.0
+		var exit_cell_y: float = 6.0
+		var exit_grid_x: float = exit_cell_x * 2.0 + 1.0
+		var exit_grid_y: float = exit_cell_y * 2.0 + 1.0
+		var exit_marker: Rect2 = Rect2(
+			exit_grid_x * ts * scale_factor - dot_size / 2.0,
+			exit_grid_y * ts * scale_factor - dot_size / 2.0,
+			dot_size,
+			dot_size
+		)
+		var exit_color: Color = Settings.exit_colour_locked
+		if exit_unlocked:
+			exit_color = Settings.exit_colour_unlocked
+		draw_rect(exit_marker, exit_color)
+
+
 func _process(_delta: float) -> void:
 	if not _game_over:
 		_update_hud()
+		_update_minimap_player()
 		if _player != null and is_instance_valid(_player):
 			_camera.global_position = _player.global_position
 
@@ -466,6 +636,8 @@ func _on_coin_collected(coin_node: Node2D) -> void:
 
 	if _coins_collected >= _total_coins:
 		_exit_node.unlock()
+		if _minimap != null:
+			_minimap.exit_unlocked = true
 
 
 func _on_exit() -> void:
@@ -492,7 +664,7 @@ func _show_level_complete_screen() -> void:
 	overlay.position = Vector2.ZERO
 	overlay.size = get_viewport_rect().size
 	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(overlay)
+	_hud_layer.add_child(overlay)
 
 	var label := Label.new()
 	label.text = "Level %d complete!\nScore: %d\n\nNext level..." % [
@@ -504,7 +676,7 @@ func _show_level_complete_screen() -> void:
 	label.size = get_viewport_rect().size
 	label.add_theme_font_size_override("font_size", 36)
 	label.add_theme_color_override("font_color", Color.GOLD)
-	add_child(label)
+	_hud_layer.add_child(label)
 
 
 func _show_win_screen() -> void:
@@ -513,7 +685,7 @@ func _show_win_screen() -> void:
 	overlay.position = Vector2.ZERO
 	overlay.size = get_viewport_rect().size
 	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(overlay)
+	_hud_layer.add_child(overlay)
 
 	var label := Label.new()
 	label.text = "%s\nFinal Score: %d\n\nRestarting..." % [
@@ -525,7 +697,7 @@ func _show_win_screen() -> void:
 	label.size = get_viewport_rect().size
 	label.add_theme_font_size_override("font_size", 36)
 	label.add_theme_color_override("font_color", Color.GOLD)
-	add_child(label)
+	_hud_layer.add_child(label)
 
 
 # =====================================================================

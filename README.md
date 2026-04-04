@@ -142,9 +142,23 @@ All game parameters live in **`Settings/Settings.gd`**.
 | `step_sound_frequency`   | float  | `150.0` | Footstep tone frequency (Hz).        |
 
 ### Camera
-| Variable          | Type   | Default | Description                     |
-|-------------------|--------|---------|---------------------------------|
-| `camera_zoom`     | float  | `0.75`  | Camera zoom level. Lower = more visible. |
+| Variable          | Type   | Default | Description                                |
+|-------------------|--------|---------|--------------------------------------------|
+| `camera_zoom`     | float  | `4.0`   | Zoom. Shows ~10×6 tiles, maze > screen.   |
+
+### Minimap
+| Variable               | Type   | Default | Description                                |
+|------------------------|--------|---------|--------------------------------------------|
+| `minimap_enabled`      | bool   | `true`  | Show/hide the minimap.                     |
+| `minimap_max_width`    | float  | `150.0` | Maximum width on screen (pixels).          |
+| `minimap_padding`      | float  | `12.0`  | Bottom-right corner padding (pixels).      |
+| `minimap_player_dot_size`| float| `8.0`   | Player dot size on minimap (pixels).       |
+| `minimap_bg_opacity`   | float  | `0.8`   | Minimap background opacity (0.0–1.0).      |
+| `minimap_wall_colour`  | Color  | light grey | Wall colour on minimap (distinct from game). |
+| `minimap_fog_colour`   | Color  | near black | Colour of unrevealed tiles (fog of war). |
+| `minimap_reveal_radius`| int    | `2`     | Tiles revealed around the player.          |
+
+**Fog of war**: initially the minimap is fully covered in fog. As you move, tiles within `minimap_reveal_radius` cells are revealed permanently. The exit marker is **grey** when locked and turns **green** when all coins are collected.
 
 ---
 

@@ -165,8 +165,23 @@ Exit (Area2D) — Exit.gd
 ### Camera
 - Follows player via `_camera.global_position = _player.global_position` in `_process()`.
 - Smoothed: `position_smoothing_speed = 8.0`.
-- Zoom: `Settings.camera_zoom` (default `0.75`).
+- Zoom: `Settings.camera_zoom` (default `4.0` → shows ~10×6 tiles, maze larger than viewport).
 - Limits set to maze boundaries so camera doesn't scroll beyond walls.
+
+### HUD
+- All HUD elements (labels, overlays, minimap) live on a **`CanvasLayer`** (`_hud_layer`, layer 10).
+- This ensures they are in **screen space** and always visible regardless of camera zoom/position.
+- `_hud_label` and `_ammo_label` are children of `_hud_layer`.
+- Level-complete and win-screen overlays are also added to `_hud_layer`.
+
+### Minimap
+- Implemented as a **custom `Control` subclass (`MinimapControl`)** with `_draw()` rendering — no SubViewport needed.
+- Draws every maze tile as a scaled `Rect2`: walls use `Settings.minimap_wall_colour`, floors use a dark translucent colour.
+- Player shown as a coloured dot (`Settings.minimap_player_dot_size`) that updates each frame in `_update_minimap_player()`.
+- **Fog of war**: `_revealed` 2D boolean array (mirrors maze grid). All tiles start hidden. `_reveal_around_player()` in `Main.gd` reveals tiles within `Settings.minimap_reveal_radius` around the player's current grid position. Revealed tiles stay revealed permanently.
+- Exit marker: **grey** (`Settings.exit_colour_locked`) when not all coins collected, **green** (`Settings.exit_colour_unlocked`) once `_on_coin_collected` detects all coins are gone — `_minimap.exit_unlocked` is set to `true`.
+- Scaled to fit bottom-right corner (max width `Settings.minimap_max_width` = 150px, padding `Settings.minimap_padding`).
+- Can be disabled via `Settings.minimap_enabled`.
 
 ### Coin Detection
 - Player uses **distance-based** check in `_check_coin_overlaps()` (not Area2D signals).
