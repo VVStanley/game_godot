@@ -1,7 +1,7 @@
 ## Player.gd — Controller for the player character.
 ##
 ## Handles movement input, wall sliding, coin pick-up,
-## shooting (Space), ammo management, and sound effects.
+## shooting (Space), ammo management, health/infection, and sound effects.
 ##
 ## Scene structure (Player.tscn):
 ##   Player (CharacterBody2D) — this script
@@ -15,6 +15,12 @@ signal coin_collected(coin_node: Node2D)
 
 ## Emitted when the player fires a bullet.
 signal bullet_fired(bullet_node: Node2D)
+
+## Emitted when player health changes.
+signal health_changed(current_hp: int, max_hp: int, is_infected: bool)
+
+## Emitted when player dies (HP reaches 0).
+signal player_died
 
 var main_scene: Node
 
@@ -30,6 +36,14 @@ var _facing: Vector2 = Vector2.RIGHT
 
 # Sprite frames for different directions.
 var _sprites: Dictionary = {}
+
+# Health state.
+var _hp: int = Settings.player_max_hp
+var _hp_fractional: float = 0.0  # sub-HP accumulator for precise damage
+var _is_infected: bool = false
+var _infection_timer: float = 0.0
+var _infection_damage_dealt: float = 0.0  # track total damage this infection cycle
+var _infection_cooldown: float = 0.0  # immunity period after infection ends
 
 
 func _ready() -> void:
@@ -50,6 +64,14 @@ func _apply_settings() -> void:
 	# Physics layers — collide with walls (layer 1).
 	collision_layer = 2
 	collision_mask = 1
+
+	# Reset health.
+	_hp = Settings.player_max_hp
+	_hp_fractional = 0.0
+	_is_infected = false
+	_infection_timer = 0.0
+	_infection_damage_dealt = 0.0
+	_infection_cooldown = 0.0
 
 
 func _load_player_sprites() -> void:
@@ -93,6 +115,10 @@ func _physics_process(delta: float) -> void:
 		if _step_accumulator > Settings.wall_tile_size * 0.8:
 			_step_accumulator = 0.0
 			SoundManager.play_step()
+
+	# Health and infection management.
+	_update_health(delta)
+	_check_infection()
 
 
 func _update_facing_sprite() -> void:
@@ -153,6 +179,84 @@ func _regen_ammo(delta: float) -> void:
 
 
 # ---------------------------------------------------------------------------
+# Health and Infection
+# ---------------------------------------------------------------------------
+
+## Update health: drain HP if infected, handle cooldown immunity.
+func _update_health(delta: float) -> void:
+	# Cooldown countdown — player is immune during this time.
+	if _infection_cooldown > 0.0:
+		_infection_cooldown -= delta
+		if _infection_cooldown < 0.0:
+			_infection_cooldown = 0.0
+
+	# Infection damage over time.
+	if _is_infected:
+		_infection_timer += delta
+
+		# Total damage for this infection = max_hp * fraction, spread over duration.
+		var max_infection_damage: float = float(Settings.player_max_hp) * Settings.infection_damage_fraction
+		var damage_per_second: float = max_infection_damage / Settings.infection_duration
+
+		# Accumulate fractional damage, convert to int HP when >= 1.0.
+		_hp_fractional += damage_per_second * delta
+		_infection_damage_dealt += damage_per_second * delta
+
+		while _hp_fractional >= 1.0:
+			_hp_fractional -= 1.0
+			_hp -= 1
+
+		_hp = maxi(_hp, 0)
+
+		if _hp <= 0:
+			player_died.emit()
+		else:
+			health_changed.emit(_hp, Settings.player_max_hp, _is_infected)
+
+		# Infection ends — duration expired or max damage dealt.
+		if _infection_timer >= Settings.infection_duration or _infection_damage_dealt >= max_infection_damage:
+			_is_infected = false
+			_infection_timer = 0.0
+			_infection_damage_dealt = 0.0
+			_hp_fractional = 0.0
+			_infection_cooldown = Settings.infection_cooldown_time
+			health_changed.emit(_hp, Settings.player_max_hp, _is_infected)
+
+## Check if any enemy is close enough to infect the player.
+func _check_infection() -> void:
+	# Immune: currently infected or in cooldown.
+	if _is_infected or _infection_cooldown > 0.0:
+		return
+
+	if main_scene == null or not main_scene.has_method("get_enemies"):
+		return
+
+	var enemies: Array[Node2D] = main_scene.get_enemies()
+	var my_pos: Vector2 = global_position
+	var infection_range: float = Settings.player_radius + Settings.enemy_radius + Settings.infection_overlap_extra
+
+	for enemy in enemies:
+		if enemy == null or not is_instance_valid(enemy):
+			continue
+		if not enemy.visible:
+			continue
+		var dist: float = my_pos.distance_to(enemy.global_position)
+		if dist <= infection_range:
+			_infect()
+			return
+
+## Apply infection to the player.
+func _infect() -> void:
+	if _is_infected or _infection_cooldown > 0.0:
+		return
+
+	_is_infected = true
+	_infection_timer = 0.0
+	_infection_damage_dealt = 0.0
+	_hp_fractional = 0.0
+	health_changed.emit(_hp, Settings.player_max_hp, _is_infected)
+
+# ---------------------------------------------------------------------------
 # Public API — called by Main.gd for HUD
 # ---------------------------------------------------------------------------
 
@@ -166,6 +270,15 @@ func get_regen_remaining() -> float:
 	if _ammo >= Settings.max_ammo:
 		return 0.0
 	return Settings.ammo_regen_time - _regen_accumulator
+
+func get_hp() -> int:
+	return _hp
+
+func get_max_hp() -> int:
+	return Settings.player_max_hp
+
+func is_infected() -> bool:
+	return _is_infected
 
 
 # ---------------------------------------------------------------------------

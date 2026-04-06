@@ -34,6 +34,7 @@ var _game_over: bool = false
 
 var _hud_label: Label
 var _ammo_label: Label
+var _hp_label: Label
 var _camera: Camera2D
 var _hud_layer: CanvasLayer
 
@@ -72,6 +73,8 @@ func _ready() -> void:
 
 	_player.add_to_group("player")
 	_player.coin_collected.connect(_on_coin_collected)
+	_player.health_changed.connect(_on_health_changed)
+	_player.player_died.connect(_on_player_died)
 	_exit_node.exited.connect(_on_exit)
 
 
@@ -407,6 +410,27 @@ func _on_enemy_died() -> void:
 	_update_hud()
 
 
+func _on_health_changed(_current_hp: int, _max_hp: int, _is_infected: bool) -> void:
+	# HUD updates are handled in _update_hud() via _player queries.
+	pass
+
+
+func _on_player_died() -> void:
+	if _game_over:
+		return
+	_game_over = true
+	_player.set_physics_process(false)
+
+	# Score penalty: -10% of current total.
+	var penalty: int = int(LevelManager.total_score * 0.1)
+	LevelManager.add_score(-penalty)
+
+	_show_death_screen()
+
+	await get_tree().create_timer(Settings.restart_delay).timeout
+	get_tree().reload_current_scene()
+
+
 func _spawn_exit() -> void:
 	_exit_node = _exit_scene.instantiate()
 	_exit_node.position = _cell_to_pixel(EXIT_CELL)
@@ -436,6 +460,15 @@ func _create_hud() -> void:
 	_ammo_label.add_theme_constant_override("shadow_offset_y", 1)
 	_hud_layer.add_child(_ammo_label)
 
+	_hp_label = Label.new()
+	_hp_label.position = Vector2(16, 62)
+	_hp_label.add_theme_font_size_override("font_size", 18)
+	_hp_label.add_theme_color_override("font_color", Color.GREEN)
+	_hp_label.add_theme_color_override("font_shadow_color", Color.BLACK)
+	_hp_label.add_theme_constant_override("shadow_offset_x", 1)
+	_hp_label.add_theme_constant_override("shadow_offset_y", 1)
+	_hud_layer.add_child(_hp_label)
+
 
 func _update_hud() -> void:
 	var level: int = LevelManager.current_level
@@ -453,6 +486,16 @@ func _update_hud() -> void:
 			_ammo_label.text = "Ammo: %d / %d  (reload %.1fs)" % [ammo, max_ammo, regen]
 		else:
 			_ammo_label.text = "Ammo: %d / %d" % [ammo, max_ammo]
+
+		# Update HP display.
+		var hp: int = _player.get_hp()
+		var max_hp: int = _player.get_max_hp()
+		var infected: bool = _player.is_infected()
+		_hp_label.text = "HP: %d / %d" % [hp, max_hp]
+		if infected:
+			_hp_label.add_theme_color_override("font_color", Color.RED)
+		else:
+			_hp_label.add_theme_color_override("font_color", Color.GREEN)
 
 
 # =====================================================================
@@ -701,6 +744,28 @@ func _show_win_screen() -> void:
 	label.size = get_viewport_rect().size
 	label.add_theme_font_size_override("font_size", 36)
 	label.add_theme_color_override("font_color", Color.GOLD)
+	_hud_layer.add_child(label)
+
+
+func _show_death_screen() -> void:
+	var overlay := ColorRect.new()
+	overlay.color = Color(0.5, 0, 0, 0.5)
+	overlay.position = Vector2.ZERO
+	overlay.size = get_viewport_rect().size
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hud_layer.add_child(overlay)
+
+	var penalty: int = int(LevelManager.total_score * 0.1)
+	var label := Label.new()
+	label.text = "You died!\nScore penalty: -%d\nCurrent Score: %d\n\nRestarting level..." % [
+		penalty, LevelManager.total_score
+	]
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.position = Vector2.ZERO
+	label.size = get_viewport_rect().size
+	label.add_theme_font_size_override("font_size", 36)
+	label.add_theme_color_override("font_color", Color.RED)
 	_hud_layer.add_child(label)
 
 
