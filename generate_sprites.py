@@ -16,6 +16,7 @@ WALL_SIZE = (32, 32)
 COIN_SIZE = (20, 20)
 EXIT_SIZE = (32, 32)
 BULLET_SIZE = (8, 8)
+AMMO_PICKUP_SIZE = (16, 16)
 
 
 def color_to_rgba(r, g, b, a=255):
@@ -461,6 +462,35 @@ def generate_bullet_sprite():
 
 
 # ============================================================================
+# AMMO PICKUP SPRITE
+# ============================================================================
+def generate_ammo_pickup_sprite():
+    print("Generating ammo pickup sprite...")
+
+    img = create_image(*AMMO_PICKUP_SIZE)
+    box = color_to_rgba(0.45, 0.3, 0.15)  # brown box
+    dark = color_to_rgba(0.3, 0.2, 0.1)
+    light = color_to_rgba(0.6, 0.45, 0.25)
+    bullet_color = color_to_rgba(1.0, 0.55, 0.1)  # orange bullets
+
+    # Draw ammo box (rectangular crate).
+    draw_rect(img, 2, 4, 12, 10, box)
+    draw_rect(img, 2, 4, 12, 2, light)  # top highlight
+    draw_rect(img, 2, 12, 12, 2, dark)   # bottom shadow
+
+    # Draw 3 small bullets on top.
+    for i in range(3):
+        bx = 4 + i * 4
+        by = 6
+        img[by][bx] = bullet_color
+        img[by][bx + 1] = bullet_color
+        img[by + 1][bx] = bullet_color
+        img[by + 1][bx + 1] = bullet_color
+
+    save_png(img, os.path.join(OUTPUT_DIR, "ammo_pickup.png"))
+
+
+# ============================================================================
 # MAIN
 # ============================================================================
 def main():
@@ -474,7 +504,8 @@ def main():
     generate_coin_sprite()
     generate_exit_sprite()
     generate_bullet_sprite()
-    
+    generate_ammo_pickup_sprite()
+
     print("=== Sprite generation complete! ===")
     print(f"All sprites saved to: {OUTPUT_DIR}/")
 

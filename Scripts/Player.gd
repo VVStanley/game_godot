@@ -25,8 +25,7 @@ signal player_died
 var main_scene: Node
 
 # Ammo state.
-var _ammo: int = Settings.max_ammo
-var _regen_accumulator: float = 0.0
+var _ammo: int = 0
 
 # Step sound pacing.
 var _step_accumulator: float = 0.0
@@ -102,9 +101,6 @@ func _physics_process(delta: float) -> void:
 	# Coin detection.
 	_check_coin_overlaps()
 
-	# Ammo regeneration.
-	_regen_ammo(delta)
-
 	# Shooting.
 	if Input.is_action_just_pressed("shoot"):
 		_shoot()
@@ -167,15 +163,9 @@ func _shoot() -> void:
 	bullet_fired.emit(bullet)
 
 
-## Regenerate ammo over time.
-func _regen_ammo(delta: float) -> void:
-	if _ammo >= Settings.max_ammo:
-		return
-
-	_regen_accumulator += delta
-	while _regen_accumulator >= Settings.ammo_regen_time and _ammo < Settings.max_ammo:
-		_regen_accumulator -= Settings.ammo_regen_time
-		_ammo += 1
+## Add ammo from pickup. Clamped to max.
+func add_ammo(amount: int) -> void:
+	_ammo = mini(_ammo + amount, Settings.max_ammo)
 
 
 # ---------------------------------------------------------------------------
@@ -266,10 +256,8 @@ func get_ammo() -> int:
 func get_max_ammo() -> int:
 	return Settings.max_ammo
 
-func get_regen_remaining() -> float:
-	if _ammo >= Settings.max_ammo:
-		return 0.0
-	return Settings.ammo_regen_time - _regen_accumulator
+func set_ammo(amount: int) -> void:
+	_ammo = maxi(0, mini(amount, Settings.max_ammo))
 
 func get_hp() -> int:
 	return _hp

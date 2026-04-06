@@ -56,6 +56,7 @@ var _player_scene: PackedScene
 var _coin_scene: PackedScene
 var _exit_scene: PackedScene
 var _enemy_scene: PackedScene
+var _ammo_pickup_scene: PackedScene
 
 
 func _ready() -> void:
@@ -67,6 +68,7 @@ func _ready() -> void:
 	_spawn_player()
 	_spawn_coins()
 	_spawn_enemies()
+	_spawn_ammo_pickups()
 	_spawn_exit()
 	_setup_hud_layer()
 	_create_hud()
@@ -93,6 +95,7 @@ func _load_packed_scenes() -> void:
 	_coin_scene = load("res://Scenes/Coin.tscn")
 	_exit_scene = load("res://Scenes/Exit.tscn")
 	_enemy_scene = load("res://Scenes/Enemy.tscn")
+	_ammo_pickup_scene = load("res://Scenes/AmmoPickup.tscn")
 
 
 # =====================================================================
@@ -528,6 +531,12 @@ func _spawn_player() -> void:
 	add_child(_player)
 	_player.bullet_fired.connect(_on_bullet_fired)
 
+	# Set carried ammo from previous level (or starting ammo on level 1).
+	if LevelManager.current_level == 1:
+		_player.set_ammo(Settings.ammo_start_count)
+	else:
+		_player.set_ammo(LevelManager.carried_ammo)
+
 	# Camera follows player.
 	_camera.make_current()
 	_camera.global_position = _player.global_position
@@ -597,6 +606,36 @@ func _spawn_enemies() -> void:
 		add_child(enemy)
 		enemy.enemy_collected_coin.connect(_on_enemy_collected_coin)
 		enemy.enemy_died.connect(_on_enemy_died)
+
+
+func _spawn_ammo_pickups() -> void:
+	var count: int = Settings.ammo_pickup_spawn_count
+	var blocked: Array[Vector2i] = [
+		Vector2i(PLAYER_SPAWN.x * 2 + 1, PLAYER_SPAWN.y * 2 + 1),
+		Vector2i(EXIT_CELL.x * 2 + 1, EXIT_CELL.y * 2 + 1),
+	]
+
+	# Also block positions where coins and enemies spawned.
+	for coin in _coins:
+		var px: int = int(floor(coin.position.x / Settings.wall_tile_size))
+		var py: int = int(floor(coin.position.y / Settings.wall_tile_size))
+		blocked.append(Vector2i(px, py))
+
+	var candidates: Array[Vector2i] = []
+	for row in range(MAZE_ROWS):
+		for col in range(MAZE_COLS):
+			if _maze[row][col] == 0:
+				var gp := Vector2i(col, row)
+				if gp not in blocked:
+					candidates.append(gp)
+
+	candidates.shuffle()
+	count = min(count, candidates.size())
+
+	for i in range(count):
+		var ammo: Node2D = _ammo_pickup_scene.instantiate()
+		ammo.position = _grid_to_pixel(candidates[i])
+		add_child(ammo)
 
 
 func _on_enemy_collected_coin(coin_node: Node2D) -> void:
@@ -686,12 +725,7 @@ func _update_hud() -> void:
 	if _player != null and is_instance_valid(_player):
 		var ammo: int = _player.get_ammo()
 		var max_ammo: int = _player.get_max_ammo()
-		var regen: float = _player.get_regen_remaining()
-
-		if regen > 0.0 and ammo < max_ammo:
-			_ammo_label.text = "Ammo: %d / %d  (reload %.1fs)" % [ammo, max_ammo, regen]
-		else:
-			_ammo_label.text = "Ammo: %d / %d" % [ammo, max_ammo]
+		_ammo_label.text = "Ammo: %d / %d" % [ammo, max_ammo]
 
 		# Update HP display.
 		var hp: int = _player.get_hp()
@@ -899,6 +933,9 @@ func _on_exit() -> void:
 	_game_over = true
 
 	_player.set_physics_process(false)
+
+	# Save carried ammo for next level.
+	LevelManager.carried_ammo = _player.get_ammo()
 
 	if LevelManager.advance_level():
 		_show_level_complete_screen()

@@ -40,8 +40,9 @@ Collect **all coins** scattered across the maze. The exit door turns **green** w
 
 ### Shooting
 - Press **Space** to fire a bullet toward your last movement direction.
-- You start with **5 bullets**.
-- Bullets regenerate over time — settings control how fast.
+- You start with **10 bullets** (configurable via `Settings.ammo_start_count`).
+- Ammo does **not** regenerate — collect **ammo boxes** scattered across the maze to restock (+3 per box).
+- Ammo carries over between levels.
 - Enemies die in **2 hits** (configurable).
 - Bullets disappear on wall impact.
 
@@ -107,8 +108,10 @@ All game parameters live in **`Settings/Settings.gd`**.
 ### Shooting
 | Variable                | Type   | Default | Description                              |
 |-------------------------|--------|---------|------------------------------------------|
-| `max_ammo`              | int    | `5`     | Maximum bullets.                         |
-| `ammo_regen_time`       | float  | `1.5`   | Seconds to regenerate **one** bullet.    |
+| `max_ammo`              | int    | `50`    | Maximum bullets.                         |
+| `ammo_start_count`      | int    | `10`    | Starting ammo on level 1.                |
+| `ammo_pickup_amount`    | int    | `3`     | Ammo restored per ammo box pickup.       |
+| `ammo_pickup_spawn_count`| int   | `3`     | Number of ammo boxes spawned per level.  |
 | `bullet_speed`          | float  | `400.0` | Bullet velocity (px/s).                  |
 | `bullet_radius`         | float  | `4.0`   | Bullet collision + visual size.          |
 | `bullet_colour`         | Color  | `RED`   | Bullet colour.                           |

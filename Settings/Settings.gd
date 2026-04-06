@@ -51,11 +51,17 @@ var infection_overlap_extra: float = 4.0
 
 # ===================== SHOOTING =====================
 
-## Maximum bullets the player can hold.
-var max_ammo: int = 5
+## Maximum bullets the player can carry.
+var max_ammo: int = 50
 
-## Seconds to fully regenerate one bullet (when ammo < max).
-var ammo_regen_time: float = 1.5
+## Starting ammo for the first level.
+var ammo_start_count: int = 10
+
+## Ammo restored when picking up an ammo box.
+var ammo_pickup_amount: int = 3
+
+## Number of ammo boxes to spawn per level.
+var ammo_pickup_spawn_count: int = 3
 
 ## Speed of bullets in pixels per second.
 var bullet_speed: float = 400.0

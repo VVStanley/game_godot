@@ -18,6 +18,7 @@ All sprites are stored in `Assets/` and loaded at runtime. The game uses pixel-a
 | **Coin** | `coin.png` | 20×20px | Gold coin with dollar sign |
 | **Exit** | `exit.png` | 32×32px | Wooden door with gold knob |
 | **Bullet** | `bullet.png` | 8×8px | Orange projectile |
+| **Ammo Pickup** | `ammo_pickup.png` | 16×16px | Ammo box with bullets |
 
 ### Regenerating Sprites
 
@@ -60,11 +61,11 @@ Each variant has tattered ears, glowing eyes, rot patches, and zombie drool. Ran
 - **Игрок** — перемещение по лабиринту (WASD / стрелки), столкновения со стенами.
 - **Монеты** — разбросаны по лабиринту, собираются при касании, подсчёт очков.
 - **Враги** — красные круги, перемещаются случайным образом, могут подбирать монеты.
-- **Стрельба** — игрок стреляет пулями в направлении последнего движения (пробел), ограниченное количество патронов с авторегенерацией.
+- **Стрельба** — игрок стреляет пулями в направлении последнего движения (пробел), ограниченное количество патронов без авторегенерации, подбираемые коробки с патронами (+3 за штуку).
 - **Система здоровья врагов** — враги погибают с 2 попаданий (настраивается).
 - **Система здоровья игрока и заражения** — игрок имеет 100 HP; при близости врага заражается, HP постепенно уменьшается на 30% (30 очков) за полный цикл заражения (5 сек); во время заражения HUD становится красным и жирным; после заражения — иммунитет на 2 сек (`infection_cooldown_time`); при 0 HP — перезапуск уровня со штрафом -10% очков.
 - **Выход** — дверь/портал, открывается (становится зелёным) только после сбора всех монет.
-- **HUD** — отображение текущего уровня, монет (собрано / всего на карте), оставшихся врагов, суммарных очков, боезапаса с таймером перезарядки и HP (зелёный/красный при заражении).
+- **HUD** — отображение текущего уровня, монет (собрано / всего на карте), оставшихся врагов, суммарных очков, боезапаса и HP (зелёный/красный при заражении).
 - **Система уровней (10 уровней)** — для перехода на следующий уровень нужно собрать все монеты; убивать врагов необязательно. Очки за убийства врагов сохраняются между уровнями. С каждым уровнем растёт количество монет и врагов.
 - **Экран завершения уровня** — при выходе на собранном уровне показывается сообщение с текущим счётом, затем загружается следующий уровень.
 - **Финальный экран победы** — после прохождения 10-го уровня появляется итоговый счёт.
@@ -93,21 +94,23 @@ Qwen_text1/
 ├── Settings/
 │   ├── Settings.gd               # Autoload: global tunable parameters (speeds, sizes, colors, audio, levels)
 │   ├── SoundManager.gd           # Autoload: procedural audio (shoot, footstep via AudioStreamGenerator)
-│   └── LevelManager.gd           # Autoload: persistent state (current_level, total_score)
+│   └── LevelManager.gd           # Autoload: persistent state (current_level, total_score, carried_ammo)
 ├── Scenes/
 │   ├── Main.tscn                 # Root level scene (instantiated by Godot on launch)
 │   ├── Player.tscn               # Player character (CharacterBody2D)
 │   ├── Coin.tscn                 # Coin collectible (Node2D)
 │   ├── Exit.tscn                 # Exit door/portal (Area2D)
 │   ├── Bullet.tscn               # Projectile (Area2D)
-│   └── Enemy.tscn                # Roaming enemy (CharacterBody2D)
+│   ├── Enemy.tscn                # Roaming enemy (CharacterBody2D)
+│   └── AmmoPickup.tscn           # Ammo box pickup (Node2D)
 ├── Scripts/
 │   ├── Main.gd                   # Level controller, maze generation (DFS), camera, HUD, spawning, multi-level logic
-│   ├── Player.gd                 # WASD movement, wall sliding, shooting, ammo regen, coin detection, step sounds
+│   ├── Player.gd                 # WASD movement, wall sliding, shooting, ammo management, health/infection, step sounds
 │   ├── Coin.gd                   # Coin visual/collision setup from Settings
 │   ├── Exit.gd                   # Exit logic — locked/unlocked state, player detection
 │   ├── Bullet.gd                 # Projectile movement, lifetime, wall/enemy collision
-│   └── Enemy.gd                  # Random-walk AI, coin collection, health, flash-on-hit, death signal
+│   ├── Enemy.gd                  # Random-walk AI, coin collection, health, flash-on-hit, death signal
+│   └── AmmoPickup.gd             # Ammo box — gives ammo to player on overlap, then self-destructs
 └── Assets/                       # Sprite assets (PNG files, pixel-art style)
 ```
 
@@ -173,6 +176,13 @@ Coin (Node2D) — Coin.gd
 ```
 Exit (Area2D) — Exit.gd
   ├─ Sprite (Sprite2D)              (loads from Assets/exit.png)
+  └─ CollisionShape2D               (CircleShape2D)
+```
+
+### AmmoPickup.tscn
+```
+AmmoPickup (Node2D) — AmmoPickup.gd
+  ├─ Sprite (Sprite2D)              (loads from Assets/ammo_pickup.png)
   └─ CollisionShape2D               (CircleShape2D)
 ```
 
@@ -243,9 +253,14 @@ Exit (Area2D) — Exit.gd
 - Pick radius: `Settings.player_radius + Settings.coin_radius`.
 - Enemies also use distance-based checks (same formula).
 
-### Ammo Regeneration
-- Uses accumulator: `_regen_accumulator += delta`.
-- When accumulator >= `Settings.ammo_regen_time`, +1 ammo (capped at `Settings.max_ammo`).
+### Ammo System
+- Ammo does **not** regenerate.
+- Player starts with `Settings.ammo_start_count` bullets on level 1.
+- Ammo boxes (`AmmoPickup.tscn`) spawn on walkable tiles — `Settings.ammo_pickup_spawn_count` per level.
+- Each box restores `Settings.ammo_pickup_amount` bullets (capped at `Settings.max_ammo`).
+- Ammo carries over between levels via `LevelManager.carried_ammo`.
+- On level exit, `_on_exit()` saves `_player.get_ammo()` into `LevelManager.carried_ammo`.
+- On level start, `_spawn_player()` sets ammo from `LevelManager.carried_ammo` (or `Settings.ammo_start_count` for level 1).
 
 ### Enemy AI
 - Picks random walkable position within 300px radius.
