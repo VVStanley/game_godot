@@ -1,23 +1,21 @@
-## AmmoPickup.gd — Ammo box pickup on the ground.
+## Medkit.gd — Medkit pickup that heals the player.
 ##
-## When the player touches this, it grants ammo (up to max).
+## When the player touches this, it restores HP (up to max).
 
 extends Area2D
 
 
 func _ready() -> void:
-	# Collision layers — detect player body.
 	collision_layer = 0
 	collision_mask = 2  # player layer
 
 	var sprite: Sprite2D = $Sprite
-	var tex = load("res://Assets/ammo_pickup.png")
+	var tex = load("res://Assets/medkit.png")
 	if tex:
 		sprite.texture = tex
 	else:
-		# Fallback: draw a small box.
 		var img := Image.create(16, 16, false, Image.FORMAT_RGBA8)
-		img.fill(Color(0.5, 0.3, 0.1))
+		img.fill(Color.WHITE)
 		sprite.texture = ImageTexture.create_from_image(img)
 
 	var shape: CircleShape2D = $CollisionShape2D.shape as CircleShape2D
@@ -31,8 +29,8 @@ func _ready() -> void:
 
 func _on_body_entered(body: Node2D) -> void:
 	if body.is_in_group("player"):
-		if body.has_method("add_ammo"):
-			body.add_ammo(Settings.ammo_pickup_amount)
+		if body.has_method("heal"):
+			body.heal(Settings.medkit_heal_amount)
 		queue_free()
 
 

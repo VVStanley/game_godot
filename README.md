@@ -42,7 +42,8 @@ Collect **all coins** scattered across the maze. The exit door turns **green** w
 - Press **Space** to fire a bullet toward your last movement direction.
 - You start with **10 bullets** (configurable via `Settings.ammo_start_count`).
 - Ammo does **not** regenerate — collect **ammo boxes** scattered across the maze to restock (+3 per box).
-- Ammo carries over between levels.
+- Ammo carries over between levels (minimum 10 per level, but keeps more if you saved up).
+- No upper limit on ammo — stockpile as much as you can!
 - Enemies die in **2 hits** (configurable).
 - Bullets disappear on wall impact.
 
@@ -50,9 +51,13 @@ Collect **all coins** scattered across the maze. The exit door turns **green** w
 - You have **100 HP** (configurable via `Settings.player_max_hp`).
 - When an enemy gets close to you, you become **infected** — your HP drains over time.
 - While infected, your HP display turns **red** and decreases until the infection expires.
-- After infection ends, you are **invulnerable** for 1 second.
+- After infection ends, you are **invulnerable** for 2 seconds.
 - If your HP reaches **0**, you die — the level restarts with a **-10% score penalty**.
 - You can still shoot enemies while infected, but you must avoid them to survive.
+
+### Health Items
+- **Medkits** (white box with red cross) — restore **+20 HP** on pickup (up to 100). 1–2 per level.
+- **Medicine** (syringe) — reduces infection damage from **30% to 20%** of max HP. 0–1 per level. Persists across levels.
 
 ### Enemies
 - Red circles that **wander randomly** through the maze.
@@ -108,7 +113,6 @@ All game parameters live in **`Settings/Settings.gd`**.
 ### Shooting
 | Variable                | Type   | Default | Description                              |
 |-------------------------|--------|---------|------------------------------------------|
-| `max_ammo`              | int    | `50`    | Maximum bullets.                         |
 | `ammo_start_count`      | int    | `10`    | Starting ammo on level 1.                |
 | `ammo_pickup_amount`    | int    | `3`     | Ammo restored per ammo box pickup.       |
 | `ammo_pickup_spawn_count`| int   | `3`     | Number of ammo boxes spawned per level.  |
@@ -177,6 +181,14 @@ All game parameters live in **`Settings/Settings.gd`**.
 | `minimap_wall_colour`  | Color  | light grey | Wall colour on minimap (distinct from game). |
 | `minimap_fog_colour`   | Color  | near black | Colour of unrevealed tiles (fog of war). |
 | `minimap_reveal_radius`| int    | `2`     | Tiles revealed around the player.          |
+
+### Health Items
+| Variable                        | Type   | Default | Description                                      |
+|---------------------------------|--------|---------|--------------------------------------------------|
+| `medkit_max_spawn`              | int    | `2`     | Max medkits spawned per level.                    |
+| `medicine_max_spawn`            | int    | `1`     | Max medicine (infection reducer) per level.       |
+| `medkit_heal_amount`            | int    | `20`    | HP restored per medkit pickup.                    |
+| `medicine_infection_damage_fraction` | float | `0.2` | Infection damage when medicine is active (20%). |
 
 **Fog of war**: initially the minimap is fully covered in fog. As you move, tiles within `minimap_reveal_radius` cells are revealed permanently. The exit marker is **grey** when locked and turns **green** when all coins are collected.
 

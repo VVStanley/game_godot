@@ -163,9 +163,18 @@ func _shoot() -> void:
 	bullet_fired.emit(bullet)
 
 
-## Add ammo from pickup. Clamped to max.
+## Add ammo from pickup. No upper limit.
 func add_ammo(amount: int) -> void:
-	_ammo = mini(_ammo + amount, Settings.max_ammo)
+	_ammo += amount
+
+## Set ammo to a specific value (used on level start).
+func set_ammo(amount: int) -> void:
+	_ammo = maxi(0, amount)
+
+## Heal the player by the given amount, up to max HP.
+func heal(amount: int) -> void:
+	_hp = mini(_hp + amount, Settings.player_max_hp)
+	health_changed.emit(_hp, Settings.player_max_hp, _is_infected)
 
 
 # ---------------------------------------------------------------------------
@@ -184,8 +193,13 @@ func _update_health(delta: float) -> void:
 	if _is_infected:
 		_infection_timer += delta
 
+		# Use medicine damage fraction if player has medicine.
+		var infection_damage_fraction: float = Settings.infection_damage_fraction
+		if LevelManager.has_medicine:
+			infection_damage_fraction = Settings.medicine_infection_damage_fraction
+
 		# Total damage for this infection = max_hp * fraction, spread over duration.
-		var max_infection_damage: float = float(Settings.player_max_hp) * Settings.infection_damage_fraction
+		var max_infection_damage: float = float(Settings.player_max_hp) * infection_damage_fraction
 		var damage_per_second: float = max_infection_damage / Settings.infection_duration
 
 		# Accumulate fractional damage, convert to int HP when >= 1.0.
@@ -254,10 +268,7 @@ func get_ammo() -> int:
 	return _ammo
 
 func get_max_ammo() -> int:
-	return Settings.max_ammo
-
-func set_ammo(amount: int) -> void:
-	_ammo = maxi(0, mini(amount, Settings.max_ammo))
+	return _ammo
 
 func get_hp() -> int:
 	return _hp

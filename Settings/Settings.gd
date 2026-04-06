@@ -51,9 +51,6 @@ var infection_overlap_extra: float = 4.0
 
 # ===================== SHOOTING =====================
 
-## Maximum bullets the player can carry.
-var max_ammo: int = 50
-
 ## Starting ammo for the first level.
 var ammo_start_count: int = 10
 
@@ -62,6 +59,19 @@ var ammo_pickup_amount: int = 3
 
 ## Number of ammo boxes to spawn per level.
 var ammo_pickup_spawn_count: int = 3
+
+## Max medkits to spawn per level.
+var medkit_max_spawn: int = 2
+
+## Max medicine (infection reducers) to spawn per level.
+var medicine_max_spawn: int = 1
+
+## HP restored when picking up a medkit.
+var medkit_heal_amount: int = 20
+
+## Infection damage fraction when using medicine (replaces normal damage).
+## Normal: 30% of max HP. With medicine: 20% of max HP.
+var medicine_infection_damage_fraction: float = 0.2
 
 ## Speed of bullets in pixels per second.
 var bullet_speed: float = 400.0

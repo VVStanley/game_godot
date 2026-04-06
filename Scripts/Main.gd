@@ -41,6 +41,7 @@ var _game_over: bool = false
 var _hud_label: Label
 var _ammo_label: Label
 var _hp_label: Label
+var _medicine_label: Label
 var _camera: Camera2D
 var _hud_layer: CanvasLayer
 
@@ -57,6 +58,8 @@ var _coin_scene: PackedScene
 var _exit_scene: PackedScene
 var _enemy_scene: PackedScene
 var _ammo_pickup_scene: PackedScene
+var _medkit_scene: PackedScene
+var _medicine_scene: PackedScene
 
 
 func _ready() -> void:
@@ -69,6 +72,8 @@ func _ready() -> void:
 	_spawn_coins()
 	_spawn_enemies()
 	_spawn_ammo_pickups()
+	_spawn_medkits()
+	_spawn_medicine()
 	_spawn_exit()
 	_setup_hud_layer()
 	_create_hud()
@@ -96,6 +101,8 @@ func _load_packed_scenes() -> void:
 	_exit_scene = load("res://Scenes/Exit.tscn")
 	_enemy_scene = load("res://Scenes/Enemy.tscn")
 	_ammo_pickup_scene = load("res://Scenes/AmmoPickup.tscn")
+	_medkit_scene = load("res://Scenes/Medkit.tscn")
+	_medicine_scene = load("res://Scenes/Medicine.tscn")
 
 
 # =====================================================================
@@ -610,16 +617,7 @@ func _spawn_enemies() -> void:
 
 func _spawn_ammo_pickups() -> void:
 	var count: int = Settings.ammo_pickup_spawn_count
-	var blocked: Array[Vector2i] = [
-		Vector2i(PLAYER_SPAWN.x * 2 + 1, PLAYER_SPAWN.y * 2 + 1),
-		Vector2i(EXIT_CELL.x * 2 + 1, EXIT_CELL.y * 2 + 1),
-	]
-
-	# Also block positions where coins and enemies spawned.
-	for coin in _coins:
-		var px: int = int(floor(coin.position.x / Settings.wall_tile_size))
-		var py: int = int(floor(coin.position.y / Settings.wall_tile_size))
-		blocked.append(Vector2i(px, py))
+	var blocked := _collect_blocked_positions()
 
 	var candidates: Array[Vector2i] = []
 	for row in range(MAZE_ROWS):
@@ -636,6 +634,80 @@ func _spawn_ammo_pickups() -> void:
 		var ammo: Node2D = _ammo_pickup_scene.instantiate()
 		ammo.position = _grid_to_pixel(candidates[i])
 		add_child(ammo)
+
+
+## Spawn medkits on walkable tiles. Each medkit heals +20 HP.
+func _spawn_medkits() -> void:
+	var count: int = Settings.medkit_max_spawn
+	var blocked := _collect_blocked_positions()
+
+	var candidates: Array[Vector2i] = []
+	for row in range(MAZE_ROWS):
+		for col in range(MAZE_COLS):
+			if _maze[row][col] == 0:
+				var gp := Vector2i(col, row)
+				if gp not in blocked:
+					candidates.append(gp)
+
+	candidates.shuffle()
+	count = min(count, candidates.size())
+
+	for i in range(count):
+		var medkit: Node2D = _medkit_scene.instantiate()
+		medkit.position = _grid_to_pixel(candidates[i])
+		add_child(medkit)
+
+
+## Spawn medicine (infection reducer) on walkable tiles.
+func _spawn_medicine() -> void:
+	var count: int = Settings.medicine_max_spawn
+	var blocked := _collect_blocked_positions()
+
+	# Also block medkit positions.
+	# (We collect already-spawned pickups below.)
+
+	var candidates: Array[Vector2i] = []
+	for row in range(MAZE_ROWS):
+		for col in range(MAZE_COLS):
+			if _maze[row][col] == 0:
+				var gp := Vector2i(col, row)
+				if gp not in blocked:
+					candidates.append(gp)
+
+	candidates.shuffle()
+	count = min(count, candidates.size())
+
+	for i in range(count):
+		var med: Node2D = _medicine_scene.instantiate()
+		med.position = _grid_to_pixel(candidates[i])
+		add_child(med)
+
+
+## Collect all blocked positions (spawn, exit, coins, enemies).
+func _collect_blocked_positions() -> Array[Vector2i]:
+	var blocked: Array[Vector2i] = [
+		Vector2i(PLAYER_SPAWN.x * 2 + 1, PLAYER_SPAWN.y * 2 + 1),
+		Vector2i(EXIT_CELL.x * 2 + 1, EXIT_CELL.y * 2 + 1),
+	]
+
+	for coin in _coins:
+		var px: int = int(floor(coin.position.x / Settings.wall_tile_size))
+		var py: int = int(floor(coin.position.y / Settings.wall_tile_size))
+		blocked.append(Vector2i(px, py))
+
+	for enemy in _enemies:
+		var px: int = int(floor(enemy.position.x / Settings.wall_tile_size))
+		var py: int = int(floor(enemy.position.y / Settings.wall_tile_size))
+		blocked.append(Vector2i(px, py))
+
+	# Include already-spawned pickups.
+	for child in get_children():
+		if child != null and is_instance_valid(child) and child.has_method("_is_pickup"):
+			var px: int = int(floor(child.position.x / Settings.wall_tile_size))
+			var py: int = int(floor(child.position.y / Settings.wall_tile_size))
+			blocked.append(Vector2i(px, py))
+
+	return blocked
 
 
 func _on_enemy_collected_coin(coin_node: Node2D) -> void:
@@ -714,6 +786,15 @@ func _create_hud() -> void:
 	_hp_label.add_theme_constant_override("shadow_offset_y", 1)
 	_hud_layer.add_child(_hp_label)
 
+	_medicine_label = Label.new()
+	_medicine_label.position = Vector2(16, 88)
+	_medicine_label.add_theme_font_size_override("font_size", 16)
+	_medicine_label.add_theme_color_override("font_color", Color(0.3, 0.8, 0.5))
+	_medicine_label.add_theme_color_override("font_shadow_color", Color.BLACK)
+	_medicine_label.add_theme_constant_override("shadow_offset_x", 1)
+	_medicine_label.add_theme_constant_override("shadow_offset_y", 1)
+	_hud_layer.add_child(_medicine_label)
+
 
 func _update_hud() -> void:
 	var level: int = LevelManager.current_level
@@ -724,8 +805,7 @@ func _update_hud() -> void:
 
 	if _player != null and is_instance_valid(_player):
 		var ammo: int = _player.get_ammo()
-		var max_ammo: int = _player.get_max_ammo()
-		_ammo_label.text = "Ammo: %d / %d" % [ammo, max_ammo]
+		_ammo_label.text = "Ammo: %d" % ammo
 
 		# Update HP display.
 		var hp: int = _player.get_hp()
@@ -736,6 +816,13 @@ func _update_hud() -> void:
 			_hp_label.add_theme_color_override("font_color", Color.RED)
 		else:
 			_hp_label.add_theme_color_override("font_color", Color.GREEN)
+
+		# Medicine status.
+		if LevelManager.has_medicine:
+			_medicine_label.text = "💊 Medicine active (infection reduced)"
+			_medicine_label.visible = true
+		else:
+			_medicine_label.visible = false
 
 
 # =====================================================================
@@ -934,8 +1021,8 @@ func _on_exit() -> void:
 
 	_player.set_physics_process(false)
 
-	# Save carried ammo for next level.
-	LevelManager.carried_ammo = _player.get_ammo()
+	# Save carried ammo for next level (minimum 10, keep more if player has it).
+	LevelManager.carried_ammo = maxi(_player.get_ammo(), 10)
 
 	if LevelManager.advance_level():
 		_show_level_complete_screen()

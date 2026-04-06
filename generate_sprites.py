@@ -17,6 +17,8 @@ COIN_SIZE = (20, 20)
 EXIT_SIZE = (32, 32)
 BULLET_SIZE = (8, 8)
 AMMO_PICKUP_SIZE = (16, 16)
+MEDKIT_SIZE = (16, 16)
+MEDICINE_SIZE = (16, 16)
 
 
 def color_to_rgba(r, g, b, a=255):
@@ -491,6 +493,65 @@ def generate_ammo_pickup_sprite():
 
 
 # ============================================================================
+# MEDKIT SPRITE — White case with red cross
+# ============================================================================
+def generate_medkit_sprite():
+    print("Generating medkit sprite...")
+
+    img = create_image(*MEDKIT_SIZE)
+    white = color_to_rgba(0.95, 0.95, 0.95)
+    grey = color_to_rgba(0.7, 0.7, 0.7)
+    red = color_to_rgba(0.9, 0.1, 0.1)
+    dark_red = color_to_rgba(0.6, 0.0, 0.0)
+
+    # Draw white case (rectangle).
+    draw_rect(img, 2, 3, 12, 11, white)
+    draw_rect(img, 2, 3, 12, 2, grey)  # top highlight
+    draw_rect(img, 2, 12, 12, 2, color_to_rgba(0.5, 0.5, 0.5))  # bottom shadow
+
+    # Draw red cross.
+    # Vertical bar.
+    draw_rect(img, 6, 5, 4, 7, red)
+    # Horizontal bar.
+    draw_rect(img, 4, 7, 8, 3, red)
+
+    # Cross highlight.
+    draw_rect(img, 7, 6, 2, 1, color_to_rgba(1.0, 0.3, 0.3))
+
+    save_png(img, os.path.join(OUTPUT_DIR, "medkit.png"))
+
+
+# ============================================================================
+# MEDICINE SPRITE — Syringe
+# ============================================================================
+def generate_medicine_sprite():
+    print("Generating medicine sprite...")
+
+    img = create_image(*MEDICINE_SIZE)
+    glass = color_to_rgba(0.8, 0.9, 0.95)
+    liquid = color_to_rgba(0.3, 0.7, 0.4)  # green liquid
+    metal = color_to_rgba(0.6, 0.6, 0.65)
+    dark = color_to_rgba(0.35, 0.35, 0.4)
+    needle = color_to_rgba(0.75, 0.75, 0.8)
+
+    # Draw syringe body (vertical).
+    draw_rect(img, 5, 2, 6, 10, glass)
+    draw_rect(img, 5, 2, 6, 2, color_to_rgba(0.9, 0.95, 1.0))  # top highlight
+
+    # Green liquid inside.
+    draw_rect(img, 6, 5, 4, 6, liquid)
+
+    # Needle (top).
+    draw_rect(img, 7, 0, 2, 3, needle)
+
+    # Plunger (bottom).
+    draw_rect(img, 6, 11, 4, 2, metal)
+    draw_rect(img, 4, 12, 8, 2, dark)  # plunger base
+
+    save_png(img, os.path.join(OUTPUT_DIR, "medicine.png"))
+
+
+# ============================================================================
 # MAIN
 # ============================================================================
 def main():
@@ -505,6 +566,8 @@ def main():
     generate_exit_sprite()
     generate_bullet_sprite()
     generate_ammo_pickup_sprite()
+    generate_medkit_sprite()
+    generate_medicine_sprite()
 
     print("=== Sprite generation complete! ===")
     print(f"All sprites saved to: {OUTPUT_DIR}/")
