@@ -243,12 +243,16 @@ func _create_tileset(tile_size: int) -> TileSet:
 	var ts := TileSet.new()
 	ts.tile_size = Vector2i(tile_size, tile_size)
 
-	var img := Image.create(tile_size, tile_size, false, Image.FORMAT_RGBA8)
-	img.fill(Settings.wall_colour)
-	var texture := ImageTexture.create_from_image(img)
+	# Load wall tile texture.
+	var wall_texture = load("res://Assets/wall_tile.png")
+	if wall_texture == null:
+		# Fallback to procedural if texture not found.
+		var img := Image.create(tile_size, tile_size, false, Image.FORMAT_RGBA8)
+		img.fill(Settings.wall_colour)
+		wall_texture = ImageTexture.create_from_image(img)
 
 	var source := TileSetAtlasSource.new()
-	source.texture = texture
+	source.texture = wall_texture
 	source.texture_region_size = Vector2i(tile_size, tile_size)
 	source.create_tile(Vector2i(0, 0))
 	ts.add_source(source)

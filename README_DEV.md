@@ -4,6 +4,56 @@ Developer-facing documentation for the "Maze: Coins and Exit" project.
 
 ---
 
+## Sprite Assets
+
+All sprites are stored in `Assets/` and loaded at runtime. The game uses pixel-art style sprites with transparent backgrounds.
+
+### Sprite Specifications
+
+| Asset | File(s) | Size | Description |
+|-------|---------|------|-------------|
+| **Player** | `player_down.png`, `player_up.png`, `player_left.png`, `player_right.png` | 32×32px | Armed man (Contra-style), top-down view, 4 directions |
+| **Enemies** | `zombie_cat_[1-5]_[down/up/left/right].png` | 32×32px | Zombie cats, 5 color variants (green, grey, purple, brown, blue decay), 4 directions each |
+| **Walls** | `wall_tile.png`, `wall_tile_variant.png` | 32×32px | Brick/stone wall tiles with seamless pattern |
+| **Coin** | `coin.png` | 20×20px | Gold coin with dollar sign |
+| **Exit** | `exit.png` | 32×32px | Wooden door with gold knob |
+| **Bullet** | `bullet.png` | 8×8px | Orange projectile |
+
+### Regenerating Sprites
+
+Run the sprite generator script:
+```bash
+python3 generate_sprites.py
+```
+
+This will regenerate all PNG files in `Assets/`. The generator uses pure Python with no external dependencies (uses zlib for PNG encoding).
+
+### Sprite Details
+
+#### Player (Armed Man)
+- Military green outfit
+- Dark brown hair
+- Gunmetal weapon
+- Visible gun changes based on facing direction
+- 32×32px pixel art
+
+#### Zombie Cats (5 Variants)
+1. **zombie_cat_1** — Classic green decay (red eyes)
+2. **zombie_cat_2** — Grey decay (yellow eyes)
+3. **zombie_cat_3** — Purple decay (pink eyes)
+4. **zombie_cat_4** — Brown decay (green eyes)
+5. **zombie_cat_5** — Blue decay (orange eyes)
+
+Each variant has tattered ears, glowing eyes, rot patches, and zombie drool. Random variant assigned per enemy instance at spawn.
+
+#### Wall Tiles
+- `wall_tile.png` — Classic brick pattern
+- `wall_tile_variant.png` — Stone block pattern with cracks
+
+---
+
+---
+
 ## Что сделано
 
 - **Процедурная генерация лабиринта** — каждый запуск создаётся новый лабиринт алгоритмом DFS (Recursive Backtracker).
@@ -56,7 +106,7 @@ Qwen_text1/
 │   ├── Exit.gd                   # Exit logic — locked/unlocked state, player detection
 │   ├── Bullet.gd                 # Projectile movement, lifetime, wall/enemy collision
 │   └── Enemy.gd                  # Random-walk AI, coin collection, health, flash-on-hit, death signal
-└── Assets/                       # Placeholder directory (unused — all visuals/audio procedural)
+└── Assets/                       # Sprite assets (PNG files, pixel-art style)
 ```
 
 ### Autoload Registration (project.godot)
@@ -91,36 +141,36 @@ Main (Node2D) — Main.gd
 ### Player.tscn
 ```
 Player (CharacterBody2D) — Player.gd
-  ├─ Sprite (ColorRect)           (sized from Settings.player_radius)
-  └─ CollisionShape2D             (CircleShape2D, radius from Settings)
+  ├─ Sprite (Sprite2D)              (loads from Assets/player_*.png, 4 directions)
+  └─ CollisionShape2D               (CircleShape2D, radius from Settings)
 ```
 
 ### Bullet.tscn
 ```
 Bullet (Area2D) — Bullet.gd
-  ├─ Sprite (ColorRect)           (sized from Settings.bullet_radius)
-  └─ CollisionShape2D             (CircleShape2D)
+  ├─ Sprite (Sprite2D)              (loads from Assets/bullet.png)
+  └─ CollisionShape2D               (CircleShape2D)
 ```
 
 ### Enemy.tscn
 ```
 Enemy (CharacterBody2D) — Enemy.gd  [group: "enemy"]
-  ├─ Sprite (ColorRect)           (sized from Settings.enemy_radius)
-  └─ CollisionShape2D             (CircleShape2D)
+  ├─ Sprite (Sprite2D)              (loads from Assets/zombie_cat_[1-5]_*.png)
+  └─ CollisionShape2D               (CircleShape2D)
 ```
 
 ### Coin.tscn
 ```
 Coin (Node2D) — Coin.gd
-  ├─ Sprite (ColorRect)           (sized from Settings.coin_radius)
-  └─ CollisionShape2D             (CircleShape2D)
+  ├─ Sprite (Sprite2D)              (loads from Assets/coin.png)
+  └─ CollisionShape2D               (CircleShape2D)
 ```
 
 ### Exit.tscn
 ```
 Exit (Area2D) — Exit.gd
-  ├─ Sprite (ColorRect)           (sized from Settings.exit_extent)
-  └─ CollisionShape2D             (CircleShape2D)
+  ├─ Sprite (Sprite2D)              (loads from Assets/exit.png)
+  └─ CollisionShape2D               (CircleShape2D)
 ```
 
 ---
@@ -225,7 +275,15 @@ Edit `MAZE_COLS` / `MAZE_ROWS` in `Scripts/Main.gd`. Must be **odd** numbers.
 1. Add `.wav`/`.ogg` files to `Assets/`.
 2. Edit `SoundManager.gd` to load via `load("res://Assets/...")`.
 
-### Replacing Procedural Visuals
-Each entity script (`Player.gd`, `Enemy.gd`, `Coin.gd`, `Exit.gd`, `Bullet.gd`) creates `ColorRect` sprites at runtime. To use sprites:
-1. Add images to `Assets/`.
-2. Replace `ColorRect` with `Sprite2D` in the respective `_apply_settings()` / `_ready()` methods.
+### Sprite System
+All game entities now use **Sprite2D** with pixel-art PNGs from `Assets/`:
+- **Player**: 4 directional sprites (up/down/left/right)
+- **Enemies**: 5 zombie cat variants × 4 directions = 20 sprites
+- **Walls**: TileMap using wall_tile.png
+- **Coin, Exit, Bullet**: Individual PNG files
+
+To regenerate all sprites, run: `python3 generate_sprites.py`
+
+To replace with custom art:
+1. Add your PNG files to `Assets/` (use same names or update the load paths in scripts)
+2. Ensure sprite sizes match the collision shapes in Settings.gd

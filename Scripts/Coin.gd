@@ -7,7 +7,7 @@
 ##
 ## Scene structure (Coin.tscn):
 ##   Coin (Node2D) — this script
-##   ├─ Sprite (ColorRect)
+##   ├─ Sprite (Sprite2D)
 ##   └─ CollisionShape2D  (CircleShape2D)
 
 extends Node2D
@@ -23,7 +23,6 @@ func _apply_settings() -> void:
 	$CollisionShape2D.shape = CircleShape2D.new()
 	($CollisionShape2D.shape as CircleShape2D).radius = radius
 
-	var sprite: ColorRect = $Sprite
-	sprite.size = Vector2(radius * 2, radius * 2)
-	sprite.position = Vector2(-radius, -radius)
-	sprite.color = Settings.coin_colour
+	# Load coin sprite.
+	$Sprite.texture = load("res://Assets/coin.png")
+	$Sprite.centered = true

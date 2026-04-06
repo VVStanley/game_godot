@@ -6,7 +6,7 @@
 ##
 ## Scene structure (Enemy.tscn):
 ##   Enemy (CharacterBody2D) — this script
-##   ├─ Sprite (ColorRect)
+##   ├─ Sprite (Sprite2D)
 ##   └─ CollisionShape2D
 
 extends CharacterBody2D
@@ -26,6 +26,12 @@ var _main_scene: Node = null
 # Visual feedback when hit.
 var _flash_timer: float = 0.0
 var _is_flashing: bool = false
+
+# Sprite frames for different directions and variants.
+var _sprites: Dictionary = {}
+var _current_variant: int = 0
+var _last_direction: String = "down"
+var _original_texture: Texture2D
 
 
 func _ready() -> void:
@@ -47,7 +53,7 @@ func _physics_process(delta: float) -> void:
 		_flash_timer -= delta
 		if _flash_timer <= 0:
 			_is_flashing = false
-			($Sprite as ColorRect).color = Settings.enemy_colour
+			_restore_sprite()
 
 	# Check coin overlaps.
 	_check_coin_overlaps()
@@ -82,13 +88,37 @@ func _move_toward_target(delta: float) -> void:
 		_pick_new_target()
 		return
 
-	velocity = dir.normalized() * Settings.enemy_speed
+	var normalized_dir = dir.normalized()
+	velocity = normalized_dir * Settings.enemy_speed
 	move_and_slide()
+	
+	# Update facing direction based on movement.
+	_update_facing_sprite(normalized_dir)
 
 	# Timeout: if we barely moved, pick new target.
 	_change_timer -= delta
 	if _change_timer <= 0:
 		_pick_new_target()
+
+
+func _update_facing_sprite(dir: Vector2) -> void:
+	if _sprites.is_empty():
+		return
+	
+	var dir_name: String
+	if abs(dir.x) > abs(dir.y):
+		dir_name = "left" if dir.x < 0 else "right"
+	else:
+		dir_name = "up" if dir.y < 0 else "down"
+	
+	if dir_name != _last_direction and _sprites.has(dir_name):
+		$Sprite.texture = _sprites[dir_name]
+		_last_direction = dir_name
+
+
+func _restore_sprite() -> void:
+	if _original_texture != null:
+		$Sprite.texture = _original_texture
 
 
 func _pick_new_target() -> void:
@@ -141,7 +171,7 @@ func _check_coin_overlaps() -> void:
 func _flash() -> void:
 	_is_flashing = true
 	_flash_timer = 0.15
-	($Sprite as ColorRect).color = Color.WHITE
+	$Sprite.modulate = Color.WHITE
 
 
 func _apply_settings() -> void:
@@ -150,7 +180,24 @@ func _apply_settings() -> void:
 	$CollisionShape2D.shape = CircleShape2D.new()
 	($CollisionShape2D.shape as CircleShape2D).radius = radius
 
-	var sprite: ColorRect = $Sprite
-	sprite.size = Vector2(radius * 2, radius * 2)
-	sprite.position = Vector2(-radius, -radius)
-	sprite.color = Settings.enemy_colour
+	# Load zombie cat sprites.
+	_load_enemy_sprites()
+
+
+func _load_enemy_sprites() -> void:
+	# Assign a random variant to each enemy instance.
+	_current_variant = randi() % 5 + 1  # 1 to 5
+	var variant_name = "zombie_cat_" + str(_current_variant)
+	
+	_sprites = {
+		"down": load("res://Assets/" + variant_name + "_down.png"),
+		"up": load("res://Assets/" + variant_name + "_up.png"),
+		"left": load("res://Assets/" + variant_name + "_left.png"),
+		"right": load("res://Assets/" + variant_name + "_right.png"),
+	}
+	
+	var sprite: Sprite2D = $Sprite
+	_original_texture = _sprites["down"]
+	sprite.texture = _original_texture
+	sprite.centered = true
+	_last_direction = "down"

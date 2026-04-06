@@ -5,7 +5,7 @@
 ##
 ## Scene structure (Player.tscn):
 ##   Player (CharacterBody2D) — this script
-##   ├─ Sprite (ColorRect)
+##   ├─ Sprite (Sprite2D)
 ##   └─ CollisionShape2D
 
 extends CharacterBody2D
@@ -28,6 +28,9 @@ var _step_accumulator: float = 0.0
 # Tracks facing direction (last movement).
 var _facing: Vector2 = Vector2.RIGHT
 
+# Sprite frames for different directions.
+var _sprites: Dictionary = {}
+
 
 func _ready() -> void:
 	main_scene = get_tree().current_scene
@@ -41,15 +44,26 @@ func _apply_settings() -> void:
 	$CollisionShape2D.shape = CircleShape2D.new()
 	($CollisionShape2D.shape as CircleShape2D).radius = radius
 
-	# Visual.
-	var sprite: ColorRect = $Sprite
-	sprite.size = Vector2(radius * 2, radius * 2)
-	sprite.position = Vector2(-radius, -radius)
-	sprite.color = Settings.player_colour
+	# Load sprites.
+	_load_player_sprites()
 
 	# Physics layers — collide with walls (layer 1).
 	collision_layer = 2
 	collision_mask = 1
+
+
+func _load_player_sprites() -> void:
+	# Load directional sprites.
+	_sprites = {
+		"down": load("res://Assets/player_down.png"),
+		"up": load("res://Assets/player_up.png"),
+		"left": load("res://Assets/player_left.png"),
+		"right": load("res://Assets/player_right.png"),
+	}
+	
+	var sprite: Sprite2D = $Sprite
+	sprite.texture = _sprites["right"]
+	sprite.centered = true
 
 
 func _physics_process(delta: float) -> void:
@@ -58,6 +72,7 @@ func _physics_process(delta: float) -> void:
 	# Track facing direction.
 	if direction.length() > 0.0:
 		_facing = direction
+		_update_facing_sprite()
 
 	velocity = direction * Settings.player_speed
 	move_and_slide()
@@ -78,6 +93,20 @@ func _physics_process(delta: float) -> void:
 		if _step_accumulator > Settings.wall_tile_size * 0.8:
 			_step_accumulator = 0.0
 			SoundManager.play_step()
+
+
+func _update_facing_sprite() -> void:
+	if _sprites.is_empty():
+		return
+	
+	var dir_name: String
+	if abs(_facing.x) > abs(_facing.y):
+		dir_name = "left" if _facing.x < 0 else "right"
+	else:
+		dir_name = "up" if _facing.y < 0 else "down"
+	
+	if _sprites.has(dir_name):
+		$Sprite.texture = _sprites[dir_name]
 
 
 # ---------------------------------------------------------------------------

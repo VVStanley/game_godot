@@ -6,7 +6,7 @@
 ##
 ## Scene structure (Bullet.tscn):
 ##   Bullet (Area2D) — this script
-##   ├─ Sprite (ColorRect)
+##   ├─ Sprite (Sprite2D)
 ##   └─ CollisionShape2D  (CircleShape2D)
 
 extends Area2D
@@ -28,10 +28,9 @@ func _ready() -> void:
 	$CollisionShape2D.shape = CircleShape2D.new()
 	($CollisionShape2D.shape as CircleShape2D).radius = radius
 
-	var sprite: ColorRect = $Sprite
-	sprite.size = Vector2(radius * 2, radius * 2)
-	sprite.position = Vector2(-radius, -radius)
-	sprite.color = Settings.bullet_colour
+	# Load bullet sprite.
+	$Sprite.texture = load("res://Assets/bullet.png")
+	$Sprite.centered = true
 
 	body_entered.connect(_on_body_entered)
 

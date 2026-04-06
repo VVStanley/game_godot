@@ -6,7 +6,7 @@
 ##
 ## Scene structure (Exit.tscn):
 ##   Exit (Area2D) — this script
-##   ├─ Sprite (ColorRect)
+##   ├─ Sprite (Sprite2D)
 ##   └─ CollisionShape2D  (CircleShape2D)
 
 extends Area2D
@@ -31,9 +31,9 @@ func _apply_settings() -> void:
 	$CollisionShape2D.shape = CircleShape2D.new()
 	($CollisionShape2D.shape as CircleShape2D).radius = extent
 
-	var sprite: ColorRect = $Sprite
-	sprite.size = Vector2(extent * 2, extent * 2)
-	sprite.position = Vector2(-extent, -extent)
+	# Load exit sprite.
+	$Sprite.texture = load("res://Assets/exit.png")
+	$Sprite.centered = true
 	_update_visual()
 
 
@@ -52,11 +52,10 @@ func unlock() -> void:
 # ---------------------------------------------------------------------------
 
 func _update_visual() -> void:
-	var sprite: ColorRect = $Sprite
 	if _unlocked:
-		sprite.color = Settings.exit_colour_unlocked
+		$Sprite.modulate = Color.GREEN
 	else:
-		sprite.color = Settings.exit_colour_locked
+		$Sprite.modulate = Color(0.4, 0.4, 0.4)
 
 
 func _on_body_entered(body: Node2D) -> void:
