@@ -31,6 +31,24 @@ var player_radius: float = 12.0
 ## Player visual colour.
 var player_colour: Color = Color.BLUE
 
+# ===================== HEALTH & INFECTION =====================
+
+## Maximum player health points.
+var player_max_hp: int = 100
+
+## Health percentage lost per infection tick (as fraction of max HP).
+## 0.3 means 30% of max HP (= 30 points) lost over the full infection duration.
+var infection_damage_fraction: float = 0.3
+
+## Duration of infection in seconds (health drains over this period).
+var infection_duration: float = 5.0
+
+## Immunity period after infection ends — player cannot be re-infected (seconds).
+var infection_cooldown_time: float = 2.0
+
+## Additional overlap distance for infection trigger beyond collision radii.
+var infection_overlap_extra: float = 4.0
+
 # ===================== SHOOTING =====================
 
 ## Maximum bullets the player can hold.

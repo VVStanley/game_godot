@@ -45,6 +45,14 @@ Collect **all coins** scattered across the maze. The exit door turns **green** w
 - Enemies die in **2 hits** (configurable).
 - Bullets disappear on wall impact.
 
+### Health & Infection
+- You have **100 HP** (configurable via `Settings.player_max_hp`).
+- When an enemy gets close to you, you become **infected** — your HP drains over time.
+- While infected, your HP display turns **red** and decreases until the infection expires.
+- After infection ends, you are **invulnerable** for 1 second.
+- If your HP reaches **0**, you die — the level restarts with a **-10% score penalty**.
+- You can still shoot enemies while infected, but you must avoid them to survive.
+
 ### Enemies
 - Red circles that **wander randomly** through the maze.
 - They can **pick up coins** — if an enemy gets a coin, the player can't collect it.
@@ -86,6 +94,15 @@ All game parameters live in **`Settings/Settings.gd`**.
 | `player_speed`    | float  | `200.0` | Movement speed (px/s).               |
 | `player_radius`   | float  | `12.0`  | Collision radius (px).               |
 | `player_colour`   | Color  | `BLUE`  | Player fill colour.                  |
+
+### Health & Infection
+| Variable                     | Type   | Default | Description                                        |
+|------------------------------|--------|---------|----------------------------------------------------|
+| `player_max_hp`              | int    | `100`   | Maximum player health points.                      |
+| `infection_damage_fraction`  | float  | `0.3`   | Fraction of max HP lost per infection (30% = 30).  |
+| `infection_duration`         | float  | `5.0`   | How long infection lasts (seconds).                |
+| `infection_cooldown_time`    | float  | `2.0`   | Immunity period after infection ends (seconds).    |
+| `infection_overlap_extra`    | float  | `4.0`   | Extra overlap distance for infection trigger (px). |
 
 ### Shooting
 | Variable                | Type   | Default | Description                              |
