@@ -1,7 +1,8 @@
 ## Player.gd — Controller for the player character.
 ##
 ## Handles movement input, wall sliding, coin pick-up,
-## shooting (Space), ammo management, health/infection, and sound effects.
+## shooting (Space), ammo management, health/infection,
+## and pickup collection.
 ##
 ## Scene structure (Player.tscn):
 ##   Player (CharacterBody2D) — this script
@@ -22,11 +23,19 @@ signal health_changed(current_hp: int, max_hp: int, is_infected: bool)
 ## Emitted when player dies (HP reaches 0).
 signal player_died
 
+## Emitted when the player picks up an ammo box.
+signal ammo_picked_up(ammo_amount: int)
+
+## Emitted when the player picks up a medicine vial.
+signal medicine_picked_up()
+
+## Emitted when the player picks up a health kit.
+signal health_kit_picked_up(restored_hp: int)
+
 var main_scene: Node
 
-# Ammo state.
+# Ammo state — no regeneration, pickups only.
 var _ammo: int = Settings.max_ammo
-var _regen_accumulator: float = 0.0
 
 # Step sound pacing.
 var _step_accumulator: float = 0.0
@@ -44,6 +53,9 @@ var _is_infected: bool = false
 var _infection_timer: float = 0.0
 var _infection_damage_dealt: float = 0.0  # track total damage this infection cycle
 var _infection_cooldown: float = 0.0  # immunity period after infection ends
+
+# Medicine: reduces infection damage for the current level.
+var _has_medicine: bool = false
 
 
 func _ready() -> void:
@@ -65,6 +77,9 @@ func _apply_settings() -> void:
 	collision_layer = 2
 	collision_mask = 1
 
+	# Ammo: carry over from previous level, minimum max_ammo.
+	_ammo = maxi(Settings.max_ammo, LevelManager.carried_ammo)
+
 	# Reset health.
 	_hp = Settings.player_max_hp
 	_hp_fractional = 0.0
@@ -72,6 +87,7 @@ func _apply_settings() -> void:
 	_infection_timer = 0.0
 	_infection_damage_dealt = 0.0
 	_infection_cooldown = 0.0
+	_has_medicine = false
 
 
 func _load_player_sprites() -> void:
@@ -102,9 +118,6 @@ func _physics_process(delta: float) -> void:
 	# Coin detection.
 	_check_coin_overlaps()
 
-	# Ammo regeneration.
-	_regen_ammo(delta)
-
 	# Shooting.
 	if Input.is_action_just_pressed("shoot"):
 		_shoot()
@@ -119,6 +132,9 @@ func _physics_process(delta: float) -> void:
 	# Health and infection management.
 	_update_health(delta)
 	_check_infection()
+
+	# Pickup detection.
+	_check_pickup_overlaps()
 
 
 func _update_facing_sprite() -> void:
@@ -167,17 +183,6 @@ func _shoot() -> void:
 	bullet_fired.emit(bullet)
 
 
-## Regenerate ammo over time.
-func _regen_ammo(delta: float) -> void:
-	if _ammo >= Settings.max_ammo:
-		return
-
-	_regen_accumulator += delta
-	while _regen_accumulator >= Settings.ammo_regen_time and _ammo < Settings.max_ammo:
-		_regen_accumulator -= Settings.ammo_regen_time
-		_ammo += 1
-
-
 # ---------------------------------------------------------------------------
 # Health and Infection
 # ---------------------------------------------------------------------------
@@ -197,6 +202,11 @@ func _update_health(delta: float) -> void:
 		# Total damage for this infection = max_hp * fraction, spread over duration.
 		var max_infection_damage: float = float(Settings.player_max_hp) * Settings.infection_damage_fraction
 		var damage_per_second: float = max_infection_damage / Settings.infection_duration
+
+		# Medicine reduces infection damage.
+		if _has_medicine:
+			damage_per_second *= Settings.medicine_damage_multiplier
+			max_infection_damage *= Settings.medicine_damage_multiplier
 
 		# Accumulate fractional damage, convert to int HP when >= 1.0.
 		_hp_fractional += damage_per_second * delta
@@ -266,11 +276,6 @@ func get_ammo() -> int:
 func get_max_ammo() -> int:
 	return Settings.max_ammo
 
-func get_regen_remaining() -> float:
-	if _ammo >= Settings.max_ammo:
-		return 0.0
-	return Settings.ammo_regen_time - _regen_accumulator
-
 func get_hp() -> int:
 	return _hp
 
@@ -279,6 +284,32 @@ func get_max_hp() -> int:
 
 func is_infected() -> bool:
 	return _is_infected
+
+func has_medicine() -> bool:
+	return _has_medicine
+
+
+# ---------------------------------------------------------------------------
+# Pickup handling
+# ---------------------------------------------------------------------------
+
+## Called by Main.gd when player picks up an ammo box.
+## Ammo can exceed max_ammo and carries over between levels.
+func add_ammo(amount: int) -> void:
+	_ammo += amount
+
+## Called by Main.gd when player picks up a medicine vial.
+func apply_medicine() -> void:
+	_has_medicine = true
+
+## Called by Main.gd when player picks up a health kit.
+func restore_health(amount: int) -> int:
+	var old_hp: int = _hp
+	_hp = mini(_hp + amount, Settings.player_max_hp)
+	var restored: int = _hp - old_hp
+	if restored > 0:
+		health_changed.emit(_hp, Settings.player_max_hp, _is_infected)
+	return restored
 
 
 # ---------------------------------------------------------------------------
@@ -302,3 +333,52 @@ func _check_coin_overlaps() -> void:
 		if dist <= pick_radius:
 			coin_collected.emit(coin)
 			return
+
+
+# ---------------------------------------------------------------------------
+# Pickup detection (distance-based)
+# ---------------------------------------------------------------------------
+
+func _check_pickup_overlaps() -> void:
+	if main_scene == null:
+		return
+
+	var my_pos: Vector2 = global_position
+	var pick_radius: float = Settings.player_radius + Settings.pickup_radius
+
+	# Ammo pickups.
+	if main_scene.has_method("get_ammo_pickups"):
+		for pickup in main_scene.get_ammo_pickups():
+			if pickup == null or not is_instance_valid(pickup):
+				continue
+			if not pickup.visible:
+				continue
+			if my_pos.distance_to(pickup.global_position) <= pick_radius:
+				ammo_picked_up.emit(Settings.ammo_pickup_amount)
+				pickup.queue_free()
+				return
+
+	# Medicine pickups.
+	if main_scene.has_method("get_medicine_pickups"):
+		for pickup in main_scene.get_medicine_pickups():
+			if pickup == null or not is_instance_valid(pickup):
+				continue
+			if not pickup.visible:
+				continue
+			if my_pos.distance_to(pickup.global_position) <= pick_radius:
+				medicine_picked_up.emit()
+				pickup.queue_free()
+				return
+
+	# Health kit pickups.
+	if main_scene.has_method("get_health_kit_pickups"):
+		for pickup in main_scene.get_health_kit_pickups():
+			if pickup == null or not is_instance_valid(pickup):
+				continue
+			if not pickup.visible:
+				continue
+			if my_pos.distance_to(pickup.global_position) <= pick_radius:
+				var restored: int = restore_health(int(Settings.player_max_hp * Settings.health_kit_restore_fraction))
+				health_kit_picked_up.emit(restored)
+				pickup.queue_free()
+				return

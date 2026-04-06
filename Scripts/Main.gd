@@ -10,14 +10,15 @@
 extends Node2D
 
 # ---------------------------------------------------------------------------
-# Grid constants — must be odd for the cell/wall layout to work.
+# Grid variables — must be odd for the cell/wall layout to work.
+# Computed in _ready() based on Settings and current level.
 # ---------------------------------------------------------------------------
-const MAZE_COLS: int = 21
-const MAZE_ROWS: int = 15
+var _maze_cols: int = 31
+var _maze_rows: int = 21
 
-# Cell coordinates (not grid).  Cell (0,0) → grid (1,1).
-const PLAYER_SPAWN: Vector2i = Vector2i(0, 0)
-const EXIT_CELL: Vector2i = Vector2i(9, 6)
+# Spawn and exit positions in cell coordinates (not grid).
+var _player_spawn: Vector2i = Vector2i(0, 0)
+var _exit_cell: Vector2i = Vector2i(9, 6)
 
 # ---------------------------------------------------------------------------
 # State
@@ -27,6 +28,9 @@ var _player: CharacterBody2D
 var _exit_node: Area2D
 var _coins: Array[Node2D] = []
 var _enemies: Array[Node2D] = []
+var _ammo_pickups: Array[Node2D] = []
+var _medicine_pickups: Array[Node2D] = []
+var _health_kit_pickups: Array[Node2D] = []
 var _coins_collected: int = 0
 var _total_coins: int = 0
 var _total_enemies: int = 0
@@ -50,9 +54,13 @@ var _player_scene: PackedScene
 var _coin_scene: PackedScene
 var _exit_scene: PackedScene
 var _enemy_scene: PackedScene
+var _ammo_pickup_scene: PackedScene
+var _medicine_scene: PackedScene
+var _health_kit_scene: PackedScene
 
 
 func _ready() -> void:
+	_compute_maze_size()
 	_load_packed_scenes()
 	_generate_maze()
 	_build_walls()
@@ -61,6 +69,9 @@ func _ready() -> void:
 	_spawn_player()
 	_spawn_coins()
 	_spawn_enemies()
+	_spawn_ammo_pickups()
+	_spawn_medicine_pickups()
+	_spawn_health_kit_pickups()
 	_spawn_exit()
 	_setup_hud_layer()
 	_create_hud()
@@ -75,34 +86,53 @@ func _ready() -> void:
 	_player.coin_collected.connect(_on_coin_collected)
 	_player.health_changed.connect(_on_health_changed)
 	_player.player_died.connect(_on_player_died)
+	_player.ammo_picked_up.connect(_on_ammo_picked_up)
+	_player.medicine_picked_up.connect(_on_medicine_picked_up)
+	_player.health_kit_picked_up.connect(_on_health_kit_picked_up)
 	_exit_node.exited.connect(_on_exit)
 
 
 # =====================================================================
-# Packed-scene loading
+# Maze size computation — scales with level
 # =====================================================================
+
+func _compute_maze_size() -> void:
+	var level: int = LevelManager.current_level
+	_maze_cols = Settings.maze_base_cols + (level - 1) * Settings.maze_growth_per_level
+	_maze_rows = Settings.maze_base_rows + (level - 1) * Settings.maze_growth_per_level
+
+	# Player always spawns at top-left corner.
+	_player_spawn = Vector2i(0, 0)
+
+	# Exit at bottom-right corner (in cell coords).
+	var cell_cols: int = (_maze_cols - 1) / 2
+	var cell_rows: int = (_maze_rows - 1) / 2
+	_exit_cell = Vector2i(cell_cols - 1, cell_rows - 1)
 
 func _load_packed_scenes() -> void:
 	_player_scene = load("res://Scenes/Player.tscn")
 	_coin_scene = load("res://Scenes/Coin.tscn")
 	_exit_scene = load("res://Scenes/Exit.tscn")
 	_enemy_scene = load("res://Scenes/Enemy.tscn")
+	_ammo_pickup_scene = load("res://Scenes/AmmoPickup.tscn")
+	_medicine_scene = load("res://Scenes/Medicine.tscn")
+	_health_kit_scene = load("res://Scenes/HealthKit.tscn")
 
 
 # =====================================================================
-# Maze generation — Recursive Backtracker + dead-end removal
+# Maze generation — Recursive Backtracker + rooms + dead-end removal + cycles
 # =====================================================================
 
 func _generate_maze() -> void:
 	_maze = []
-	for row in range(MAZE_ROWS):
+	for row in range(_maze_rows):
 		var r: Array = []
-		for col in range(MAZE_COLS):
+		for col in range(_maze_cols):
 			r.append(1)
 		_maze.append(r)
 
-	var cell_cols: int = (MAZE_COLS - 1) / 2
-	var cell_rows: int = (MAZE_ROWS - 1) / 2
+	var cell_cols: int = (_maze_cols - 1) / 2
+	var cell_rows: int = (_maze_rows - 1) / 2
 
 	var visited: Array = []
 	for row in range(cell_rows):
@@ -145,7 +175,17 @@ func _generate_maze() -> void:
 			visited[nxt.y][nxt.x] = true
 			stack.append(nxt)
 
+	# Carve rooms after DFS.
+	_carve_rooms(rng)
+
+	# Remove dead ends for multiple paths.
 	_remove_dead_ends(rng)
+
+	# Add cycles (extra passages) to prevent blocked paths.
+	_add_cycles(rng)
+
+	# Add extra random passages (shortcuts) for variety.
+	_add_extra_passages(rng)
 
 
 func _set_cell(cell: Vector2i) -> void:
@@ -153,8 +193,8 @@ func _set_cell(cell: Vector2i) -> void:
 
 
 func _remove_dead_ends(rng: RandomNumberGenerator) -> void:
-	var cell_cols: int = (MAZE_COLS - 1) / 2
-	var cell_rows: int = (MAZE_ROWS - 1) / 2
+	var cell_cols: int = (_maze_cols - 1) / 2
+	var cell_rows: int = (_maze_rows - 1) / 2
 
 	var wall_offsets: Array[Vector2i] = [
 		Vector2i(0, -1), Vector2i(0, 1),
@@ -168,7 +208,7 @@ func _remove_dead_ends(rng: RandomNumberGenerator) -> void:
 	for cy in range(cell_rows):
 		for cx in range(cell_cols):
 			var cell: Vector2i = Vector2i(cx, cy)
-			if cell == PLAYER_SPAWN or cell == EXIT_CELL:
+			if cell == _player_spawn or cell == _exit_cell:
 				continue
 			if _count_passages(cell) != 1:
 				continue
@@ -183,10 +223,10 @@ func _remove_dead_ends(rng: RandomNumberGenerator) -> void:
 				var tgc: int = gc + target_offsets[i].x
 				var tgr: int = gr + target_offsets[i].y
 
-				if wgc > 0 and wgc < MAZE_COLS - 1 and \
-				   wgr > 0 and wgr < MAZE_ROWS - 1 and \
-				   tgc > 0 and tgc < MAZE_COLS - 1 and \
-				   tgr > 0 and tgr < MAZE_ROWS - 1:
+				if wgc > 0 and wgc < _maze_cols - 1 and \
+				   wgr > 0 and wgr < _maze_rows - 1 and \
+				   tgc > 0 and tgc < _maze_cols - 1 and \
+				   tgr > 0 and tgr < _maze_rows - 1:
 					if _maze[wgr][wgc] == 1 and _maze[tgr][tgc] == 0:
 						carvable.append(Vector2i(wgc, wgr))
 
@@ -201,11 +241,197 @@ func _count_passages(cell: Vector2i) -> int:
 	var gr: int = cell.y * 2 + 1
 	var offsets: Array[int] = [-2, 2]
 	for off in offsets:
-		if gr + off > 0 and gr + off < MAZE_ROWS - 1 and _maze[gr + off][gc] == 0:
+		if gr + off > 0 and gr + off < _maze_rows - 1 and _maze[gr + off][gc] == 0:
 			count += 1
-		if gc + off > 0 and gc + off < MAZE_COLS - 1 and _maze[gr][gc + off] == 0:
+		if gc + off > 0 and gc + off < _maze_cols - 1 and _maze[gr][gc + off] == 0:
 			count += 1
 	return count
+
+
+# ---------------------------------------------------------------------------
+# Room carving — creates 3×3 and 2×2 open spaces connected by doorways.
+# Controlled by Settings.maze_rooms_enabled.
+# ---------------------------------------------------------------------------
+
+func _carve_rooms(rng: RandomNumberGenerator) -> void:
+	if not Settings.maze_rooms_enabled:
+		return
+
+	var cell_cols: int = (_maze_cols - 1) / 2
+	var cell_rows: int = (_maze_rows - 1) / 2
+
+	var protected_cells: Array[Vector2i] = []
+	protected_cells.append(_player_spawn)
+	protected_cells.append(_exit_cell)
+
+	# Add cells adjacent to spawn/exit so rooms don't overlap them.
+	for d in [Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, -1), Vector2i(0, 1)]:
+		protected_cells.append(_player_spawn + d)
+		protected_cells.append(_exit_cell + d)
+
+	# Carve large rooms (3×3).
+	_carve_room_type(rng, 1, Settings.maze_room_count, cell_cols, cell_rows, protected_cells)
+
+	# Carve small rooms (2×2).
+	_carve_room_type(rng, 0, Settings.maze_room_small_count, cell_cols, cell_rows, protected_cells)
+
+
+## Carve rooms of a specific size. room_half = 1 → 3×3, room_half = 0 → 2×2.
+func _carve_room_type(rng: RandomNumberGenerator, room_half: int, count: int, cell_cols: int, cell_rows: int, protected_cells: Array[Vector2i]) -> void:
+	for _i in range(count):
+		var placed: bool = false
+		for _attempt in range(100):
+			var rcx: int = rng.randi_range(room_half + 1, cell_cols - room_half - 2)
+			var rcy: int = rng.randi_range(room_half + 1, cell_rows - room_half - 2)
+
+			# Check no overlap with protected cells.
+			var overlap: bool = false
+			for pc in protected_cells:
+				if abs(pc.x - rcx) <= room_half + 1 and abs(pc.y - rcy) <= room_half + 1:
+					overlap = true
+					break
+			if overlap:
+				continue
+
+			# Check most of the room area is currently walled.
+			var wall_count: int = 0
+			var total: int = 0
+			for dy in range(-room_half, room_half + 1):
+				for dx in range(-room_half, room_half + 1):
+					total += 1
+					var gc: int = (rcx + dx) * 2 + 1
+					var gr: int = (rcy + dy) * 2 + 1
+					if gc >= 0 and gc < _maze_cols and gr >= 0 and gr < _maze_rows:
+						if _maze[gr][gc] == 1:
+							wall_count += 1
+			if float(wall_count) / float(maxi(total, 1)) < 0.6:
+				continue
+
+			# Carve the room cells.
+			for dy in range(-room_half, room_half + 1):
+				for dx in range(-room_half, room_half + 1):
+					var gc: int = (rcx + dx) * 2 + 1
+					var gr: int = (rcy + dy) * 2 + 1
+					if gc > 0 and gc < _maze_cols - 1 and gr > 0 and gr < _maze_rows - 1:
+						_maze[gr][gc] = 0
+
+					# Carve internal walls between room cells.
+					if dx < room_half:
+						var wgc: int = (rcx + dx) * 2 + 2
+						var wgr: int = (rcy + dy) * 2 + 1
+						if wgc > 0 and wgc < _maze_cols - 1 and wgr > 0 and wgr < _maze_rows - 1:
+							_maze[wgr][wgc] = 0
+					if dy < room_half:
+						var wgc: int = (rcx + dx) * 2 + 1
+						var wgr: int = (rcy + dy) * 2 + 2
+						if wgc > 0 and wgc < _maze_cols - 1 and wgr > 0 and wgr < _maze_rows - 1:
+							_maze[wgr][wgc] = 0
+
+			# Ensure at least 1 doorway connects to the maze.
+			_ensure_room_connection(rcx, rcy, room_half)
+			placed = true
+			break
+
+		if not placed:
+			break
+
+
+## Ensure the room has at least one passage connecting to the maze.
+func _ensure_room_connection(rcx: int, rcy: int, room_size: int) -> void:
+	var dirs: Array[Vector2i] = [
+		Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0),
+	]
+	for d in dirs:
+		var edge_cell_x: int = rcx + d.x * (room_size + 1)
+		var edge_cell_y: int = rcy + d.y * (room_size + 1)
+		var gc: int = edge_cell_x * 2 + 1
+		var gr: int = edge_cell_y * 2 + 1
+		if gc > 0 and gc < _maze_cols - 1 and gr > 0 and gr < _maze_rows - 1:
+			_maze[gr][gc] = 0
+			return  # One doorway is enough.
+
+
+# ---------------------------------------------------------------------------
+# Cycle addition — carves extra walls to create loops in the maze.
+# Prevents the "single path" problem where enemies can block the player.
+# ---------------------------------------------------------------------------
+
+func _add_cycles(rng: RandomNumberGenerator) -> void:
+	var cell_cols: int = (_maze_cols - 1) / 2
+	var cell_rows: int = (_maze_rows - 1) / 2
+	var level: int = LevelManager.current_level
+	var cycle_count: int = 3 + level * Settings.maze_cycles_per_level
+
+	var wall_candidates: Array[Vector2i] = []
+
+	# Find walls that separate two already-connected floor cells.
+	for cy in range(1, cell_rows - 1):
+		for cx in range(1, cell_cols - 1):
+			var gc: int = cx * 2 + 1
+			var gr: int = cy * 2 + 1
+			if _maze[gr][gc] != 1:
+				continue  # Already open.
+
+			# Check horizontally: cells (cx-1, cy) and (cx+1, cy).
+			if _maze[gr][gc - 2] == 0 and _maze[gr][gc + 2] == 0:
+				wall_candidates.append(Vector2i(gc, gr))
+
+			# Check vertically: cells (cx, cy-1) and (cx, cy+1).
+			if _maze[gr - 2][gc] == 0 and _maze[gr + 2][gc] == 0:
+				wall_candidates.append(Vector2i(gc, gr))
+
+	wall_candidates.shuffle()
+	var placed: int = 0
+	for wall in wall_candidates:
+		if placed >= cycle_count:
+			break
+		_maze[wall.y][wall.x] = 0
+		placed += 1
+
+
+# ---------------------------------------------------------------------------
+# Extra passages — removes straight wall segments (not corners) to create
+# shortcuts and variety. Only walls with floor on both opposite sides.
+# ---------------------------------------------------------------------------
+
+func _add_extra_passages(rng: RandomNumberGenerator) -> void:
+	var passage_count: int = Settings.maze_extra_passages_base
+
+	var wall_candidates: Array[Vector2i] = []
+
+	# Find walls not on the maze border and not adjacent to spawn/exit.
+	var spawn_gc: int = _player_spawn.x * 2 + 1
+	var spawn_gr: int = _player_spawn.y * 2 + 1
+	var exit_gc: int = _exit_cell.x * 2 + 1
+	var exit_gr: int = _exit_cell.y * 2 + 1
+
+	for row in range(2, _maze_rows - 2):
+		for col in range(2, _maze_cols - 2):
+			if _maze[row][col] != 1:
+				continue
+
+			# Skip walls near spawn and exit (keep them safe).
+			if abs(col - spawn_gc) <= 2 and abs(row - spawn_gr) <= 2:
+				continue
+			if abs(col - exit_gc) <= 2 and abs(row - exit_gr) <= 2:
+				continue
+
+			# Only select straight walls — floor on both opposite sides.
+			# Horizontal wall: open above and below.
+			var is_horizontal: bool = _maze[row - 1][col] == 0 and _maze[row + 1][col] == 0
+			# Vertical wall: open left and right.
+			var is_vertical: bool = _maze[row][col - 1] == 0 and _maze[row][col + 1] == 0
+
+			if is_horizontal or is_vertical:
+				wall_candidates.append(Vector2i(col, row))
+
+	wall_candidates.shuffle()
+	var placed: int = 0
+	for wall in wall_candidates:
+		if placed >= passage_count:
+			break
+		_maze[wall.y][wall.x] = 0
+		placed += 1
 
 
 # =====================================================================
@@ -226,8 +452,8 @@ func _build_walls() -> void:
 	wall_body.collision_layer = 1
 	wall_body.collision_mask = 0
 
-	for row in range(MAZE_ROWS):
-		for col in range(MAZE_COLS):
+	for row in range(_maze_rows):
+		for col in range(_maze_cols):
 			if _maze[row][col] == 1:
 				tile_map.set_cell(0, Vector2i(col, row), 0, Vector2i(0, 0))
 
@@ -267,8 +493,8 @@ func _create_tileset(tile_size: int) -> TileSet:
 # =====================================================================
 
 func _cache_walkable_positions() -> void:
-	for row in range(MAZE_ROWS):
-		for col in range(MAZE_COLS):
+	for row in range(_maze_rows):
+		for col in range(_maze_cols):
 			if _maze[row][col] == 0:
 				_walkable_positions.append(_grid_to_pixel(Vector2i(col, row)))
 
@@ -300,8 +526,8 @@ func _setup_camera() -> void:
 	_camera.zoom = Vector2(Settings.camera_zoom, Settings.camera_zoom)
 
 	# Set limits so camera doesn't scroll beyond maze edges.
-	var maze_w: float = MAZE_COLS * Settings.wall_tile_size
-	var maze_ht: float = MAZE_ROWS * Settings.wall_tile_size
+	var maze_w: float = _maze_cols * Settings.wall_tile_size
+	var maze_ht: float = _maze_rows * Settings.wall_tile_size
 	var vp_size: Vector2 = get_viewport_rect().size
 	var half_vp: Vector2 = vp_size / 2.0
 	_camera.limit_left = -half_vp.x + Settings.wall_tile_size
@@ -318,7 +544,7 @@ func _setup_camera() -> void:
 
 func _spawn_player() -> void:
 	_player = _player_scene.instantiate()
-	_player.position = _cell_to_pixel(PLAYER_SPAWN)
+	_player.position = _cell_to_pixel(_player_spawn)
 	add_child(_player)
 	_player.bullet_fired.connect(_on_bullet_fired)
 
@@ -343,14 +569,14 @@ func _spawn_coins() -> void:
 	var count: int = LevelManager.get_coin_count()
 	var walkable_grid: Array[Vector2i] = []
 	var spawn_grid: Vector2i = Vector2i(
-		PLAYER_SPAWN.x * 2 + 1, PLAYER_SPAWN.y * 2 + 1
+		_player_spawn.x * 2 + 1, _player_spawn.y * 2 + 1
 	)
 	var exit_grid: Vector2i = Vector2i(
-		EXIT_CELL.x * 2 + 1, EXIT_CELL.y * 2 + 1
+		_exit_cell.x * 2 + 1, _exit_cell.y * 2 + 1
 	)
 
-	for row in range(MAZE_ROWS):
-		for col in range(MAZE_COLS):
+	for row in range(_maze_rows):
+		for col in range(_maze_cols):
 			if _maze[row][col] == 0:
 				var gp := Vector2i(col, row)
 				if gp == spawn_grid or gp == exit_grid:
@@ -368,14 +594,25 @@ func _spawn_coins() -> void:
 
 func _spawn_enemies() -> void:
 	var count: int = LevelManager.get_enemy_count()
-	var blocked: Array[Vector2i] = [
-		Vector2i(PLAYER_SPAWN.x * 2 + 1, PLAYER_SPAWN.y * 2 + 1),
-		Vector2i(EXIT_CELL.x * 2 + 1, EXIT_CELL.y * 2 + 1),
-	]
+	var spawn_cell: Vector2i = Vector2i(
+		_player_spawn.x * 2 + 1, _player_spawn.y * 2 + 1
+	)
+	var exit_grid: Vector2i = Vector2i(
+		_exit_cell.x * 2 + 1, _exit_cell.y * 2 + 1
+	)
+
+	var blocked: Array[Vector2i] = [spawn_cell, exit_grid]
+
+	# Expanded exclusion zone around spawn.
+	var block_radius: int = Settings.enemy_spawn_block_radius
+	for dy in range(-block_radius, block_radius + 1):
+		for dx in range(-block_radius, block_radius + 1):
+			if abs(dx) + abs(dy) <= block_radius:
+				blocked.append(spawn_cell + Vector2i(dx, dy))
 
 	var candidates: Array[Vector2i] = []
-	for row in range(MAZE_ROWS):
-		for col in range(MAZE_COLS):
+	for row in range(_maze_rows):
+		for col in range(_maze_cols):
 			if _maze[row][col] == 0:
 				var gp := Vector2i(col, row)
 				if gp not in blocked:
@@ -391,6 +628,53 @@ func _spawn_enemies() -> void:
 		add_child(enemy)
 		enemy.enemy_collected_coin.connect(_on_enemy_collected_coin)
 		enemy.enemy_died.connect(_on_enemy_died)
+
+
+func _spawn_ammo_pickups() -> void:
+	var level: int = LevelManager.current_level
+	var base_count: int = Settings.ammo_box_count
+	# Ammo boxes scale with level to keep up with growing maze size.
+	var count: int = base_count + level / 2
+	_spawn_pickups(_ammo_pickup_scene, _ammo_pickups, count)
+
+
+func _spawn_medicine_pickups() -> void:
+	var count: int = Settings.medicine_count
+	_spawn_pickups(_medicine_scene, _medicine_pickups, count)
+
+
+func _spawn_health_kit_pickups() -> void:
+	var count: int = Settings.health_kit_count
+	_spawn_pickups(_health_kit_scene, _health_kit_pickups, count)
+
+
+## Generic pickup spawner — places items on random walkable cells.
+func _spawn_pickups(scene: PackedScene, target_array: Array[Node2D], count: int) -> void:
+	var spawn_grid: Vector2i = Vector2i(
+		_player_spawn.x * 2 + 1, _player_spawn.y * 2 + 1
+	)
+	var exit_grid: Vector2i = Vector2i(
+		_exit_cell.x * 2 + 1, _exit_cell.y * 2 + 1
+	)
+
+	var blocked: Array[Vector2i] = [spawn_grid, exit_grid]
+
+	var candidates: Array[Vector2i] = []
+	for row in range(_maze_rows):
+		for col in range(_maze_cols):
+			if _maze[row][col] == 0:
+				var gp := Vector2i(col, row)
+				if gp not in blocked:
+					candidates.append(gp)
+
+	candidates.shuffle()
+	count = min(count, candidates.size())
+
+	for i in range(count):
+		var pickup: Node2D = scene.instantiate()
+		pickup.position = _grid_to_pixel(candidates[i])
+		target_array.append(pickup)
+		add_child(pickup)
 
 
 func _on_enemy_collected_coin(coin_node: Node2D) -> void:
@@ -415,6 +699,22 @@ func _on_health_changed(_current_hp: int, _max_hp: int, _is_infected: bool) -> v
 	pass
 
 
+func _on_ammo_picked_up(_amount: int) -> void:
+	if _player != null and is_instance_valid(_player):
+		_player.add_ammo(_amount)
+	_update_hud()
+
+
+func _on_medicine_picked_up() -> void:
+	if _player != null and is_instance_valid(_player):
+		_player.apply_medicine()
+	_update_hud()
+
+
+func _on_health_kit_picked_up(_restored: int) -> void:
+	_update_hud()
+
+
 func _on_player_died() -> void:
 	if _game_over:
 		return
@@ -433,7 +733,7 @@ func _on_player_died() -> void:
 
 func _spawn_exit() -> void:
 	_exit_node = _exit_scene.instantiate()
-	_exit_node.position = _cell_to_pixel(EXIT_CELL)
+	_exit_node.position = _cell_to_pixel(_exit_cell)
 	add_child(_exit_node)
 
 
@@ -480,12 +780,7 @@ func _update_hud() -> void:
 	if _player != null and is_instance_valid(_player):
 		var ammo: int = _player.get_ammo()
 		var max_ammo: int = _player.get_max_ammo()
-		var regen: float = _player.get_regen_remaining()
-
-		if regen > 0.0 and ammo < max_ammo:
-			_ammo_label.text = "Ammo: %d / %d  (reload %.1fs)" % [ammo, max_ammo, regen]
-		else:
-			_ammo_label.text = "Ammo: %d / %d" % [ammo, max_ammo]
+		_ammo_label.text = "Ammo: %d / %d" % [ammo, max_ammo]
 
 		# Update HP display.
 		var hp: int = _player.get_hp()
@@ -507,8 +802,8 @@ func _create_minimap() -> void:
 		return
 
 	var tile_size: int = Settings.wall_tile_size
-	var maze_w: int = MAZE_COLS * tile_size
-	var maze_h: int = MAZE_ROWS * tile_size
+	var maze_w: int = _maze_cols * tile_size
+	var maze_h: int = _maze_rows * tile_size
 
 	var max_w: float = Settings.minimap_max_width
 	var scale_factor: float = max_w / float(maze_w)
@@ -517,10 +812,11 @@ func _create_minimap() -> void:
 
 	_minimap = MinimapControl.new()
 	_minimap.custom_minimum_size = Vector2(minimap_w, minimap_h)
-	_minimap.maze_cols = MAZE_COLS
-	_minimap.maze_rows = MAZE_ROWS
+	_minimap.maze_cols = _maze_cols
+	_minimap.maze_rows = _maze_rows
 	_minimap.maze_data = _maze.duplicate(true)
 	_minimap.scale_factor = scale_factor
+	_minimap.exit_cell_pos = _exit_cell
 	_minimap.exit_unlocked = false
 
 	var vp_size: Vector2 = get_viewport_rect().size
@@ -555,7 +851,7 @@ func _reveal_around_player() -> void:
 		for dx in range(-radius, radius + 1):
 			var gx: int = px + dx
 			var gy: int = py + dy
-			if gx >= 0 and gx < MAZE_COLS and gy >= 0 and gy < MAZE_ROWS:
+			if gx >= 0 and gx < _maze_cols and gy >= 0 and gy < _maze_rows:
 				_minimap.reveal_tile(gx, gy)
 
 
@@ -566,6 +862,7 @@ class MinimapControl extends Control:
 	var maze_rows: int = 0
 	var scale_factor: float = 1.0
 	var player_pos: Vector2 = Vector2.ZERO
+	var exit_cell_pos: Vector2 = Vector2i(0, 0)
 	var exit_unlocked: bool = false
 
 	# Fog of war — 2D grid: true = revealed, false = hidden.
@@ -633,8 +930,8 @@ class MinimapControl extends Control:
 		draw_rect(dot_rect, Settings.player_colour)
 
 		# Exit marker — grey when locked, green when unlocked.
-		var exit_cell_x: float = 9.0
-		var exit_cell_y: float = 6.0
+		var exit_cell_x: float = float(exit_cell_pos.x)
+		var exit_cell_y: float = float(exit_cell_pos.y)
 		var exit_grid_x: float = exit_cell_x * 2.0 + 1.0
 		var exit_grid_y: float = exit_cell_y * 2.0 + 1.0
 		var exit_marker: Rect2 = Rect2(
@@ -667,6 +964,15 @@ func get_coins() -> Array[Node2D]:
 func get_enemies() -> Array[Node2D]:
 	return _enemies
 
+func get_ammo_pickups() -> Array[Node2D]:
+	return _ammo_pickups
+
+func get_medicine_pickups() -> Array[Node2D]:
+	return _medicine_pickups
+
+func get_health_kit_pickups() -> Array[Node2D]:
+	return _health_kit_pickups
+
 
 # =====================================================================
 # Signal callbacks
@@ -693,6 +999,9 @@ func _on_exit() -> void:
 	_game_over = true
 
 	_player.set_physics_process(false)
+
+	# Save remaining ammo for the next level.
+	LevelManager.carried_ammo = _player.get_ammo()
 
 	if LevelManager.advance_level():
 		_show_level_complete_screen()

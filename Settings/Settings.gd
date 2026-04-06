@@ -20,6 +20,36 @@ var base_enemy_count: int = 3
 ## Score awarded per enemy kill.
 var score_per_kill: int = 5
 
+# ===================== MAZE =====================
+
+## Base maze columns for level 1 (must be odd).
+var maze_base_cols: int = 31
+
+## Base maze rows for level 1 (must be odd).
+var maze_base_rows: int = 21
+
+## Additional columns/rows added per level (must be even to keep maze size odd).
+var maze_growth_per_level: int = 2
+
+## Number of extra passage cycles to carve per level (loops in the maze).
+var maze_cycles_per_level: int = 1
+
+## Radius (in cells) around player spawn where enemies cannot appear.
+var enemy_spawn_block_radius: int = 4
+
+## Number of 3×3 rooms to generate in the maze.
+var maze_room_count: int = 2
+
+## Number of 2×2 rooms to generate in the maze.
+var maze_room_small_count: int = 1
+
+## Enable room carving in the maze (true = rooms, false = no rooms).
+var maze_rooms_enabled: bool = true
+
+## Number of extra random wall removals to create shortcuts.
+## Fixed count — removes straight wall segments only (not corners).
+var maze_extra_passages_base: int = 15
+
 # ===================== PLAYER =====================
 
 ## Movement speed in pixels per second.
@@ -49,13 +79,33 @@ var infection_cooldown_time: float = 2.0
 ## Additional overlap distance for infection trigger beyond collision radii.
 var infection_overlap_extra: float = 4.0
 
+# ===================== PICKUPS =====================
+
+## Number of medicine vials to spawn per level.
+var medicine_count: int = 1
+
+## Infection damage multiplier when medicine is active (0.2 = 20% of normal).
+var medicine_damage_multiplier: float = 0.2
+
+## Radius of ammo box / medicine / health kit pickup shapes (pixels).
+var pickup_radius: float = 12.0
+
+## Number of health kits to spawn per level.
+var health_kit_count: int = 1
+
+## Health restored by a health kit (fraction of max HP).
+var health_kit_restore_fraction: float = 0.25
+
 # ===================== SHOOTING =====================
 
 ## Maximum bullets the player can hold.
-var max_ammo: int = 5
+var max_ammo: int = 10
 
-## Seconds to fully regenerate one bullet (when ammo < max).
-var ammo_regen_time: float = 1.5
+## Ammo granted when picking up an ammo box.
+var ammo_pickup_amount: int = 3
+
+## Number of ammo boxes to spawn per level.
+var ammo_box_count: int = 2
 
 ## Speed of bullets in pixels per second.
 var bullet_speed: float = 400.0

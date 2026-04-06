@@ -16,6 +16,7 @@ WALL_SIZE = (32, 32)
 COIN_SIZE = (20, 20)
 EXIT_SIZE = (32, 32)
 BULLET_SIZE = (8, 8)
+PICKUP_SIZE = (24, 24)
 
 
 def color_to_rgba(r, g, b, a=255):
@@ -461,20 +462,103 @@ def generate_bullet_sprite():
 
 
 # ============================================================================
+# PICKUP SPRITES — Ammo box, Medicine, Health kit
+# ============================================================================
+def generate_ammo_box_sprite():
+    print("Generating ammo box sprite...")
+
+    img = create_image(*PICKUP_SIZE)
+    box = color_to_rgba(0.35, 0.25, 0.1)
+    box_light = color_to_rgba(0.5, 0.38, 0.18)
+    highlight = color_to_rgba(0.7, 0.55, 0.3)
+    ammo_mark = color_to_rgba(0.9, 0.85, 0.1)
+
+    # Box body
+    draw_rect(img, 3, 4, 18, 16, box)
+    draw_rect(img, 3, 4, 18, 2, box_light)
+    draw_rect(img, 3, 4, 2, 16, box_light)
+    draw_rect(img, 19, 4, 2, 16, color_to_rgba(0.2, 0.12, 0.05))
+    draw_rect(img, 3, 18, 18, 2, color_to_rgba(0.2, 0.12, 0.05))
+
+    # Highlight stripe
+    draw_rect(img, 5, 6, 14, 1, highlight)
+
+    # Ammo symbol (bullet icon)
+    draw_rect(img, 9, 8, 6, 6, ammo_mark)
+    draw_rect(img, 10, 9, 4, 4, color_to_rgba(0.95, 0.9, 0.3))
+    draw_rect(img, 11, 10, 2, 2, color_to_rgba(1.0, 0.5, 0.0))
+
+    save_png(img, os.path.join(OUTPUT_DIR, "ammo_box.png"))
+
+
+def generate_medicine_sprite():
+    print("Generating medicine vial sprite...")
+
+    img = create_image(*PICKUP_SIZE)
+    glass = color_to_rgba(0.15, 0.7, 0.25)
+    glass_dark = color_to_rgba(0.08, 0.4, 0.15)
+    cap = color_to_rgba(0.85, 0.85, 0.85)
+    cross = color_to_rgba(1.0, 1.0, 1.0)
+    highlight = color_to_rgba(0.4, 0.9, 0.5)
+
+    # Vial body (pill shape)
+    draw_rect(img, 8, 4, 8, 4, cap)  # Cap
+    draw_rect(img, 6, 8, 12, 12, glass)  # Body
+    draw_rect(img, 7, 9, 10, 10, glass_dark)  # Inner shadow
+    draw_rect(img, 7, 9, 2, 10, highlight)  # Highlight
+
+    # Medical cross on body
+    draw_rect(img, 10, 12, 4, 4, cross)
+    draw_rect(img, 9, 13, 6, 2, cross)
+
+    save_png(img, os.path.join(OUTPUT_DIR, "medicine.png"))
+
+
+def generate_health_kit_sprite():
+    print("Generating health kit sprite...")
+
+    img = create_image(*PICKUP_SIZE)
+    case = color_to_rgba(0.9, 0.1, 0.1)
+    case_dark = color_to_rgba(0.6, 0.05, 0.05)
+    case_light = color_to_rgba(1.0, 0.2, 0.2)
+    cross = color_to_rgba(1.0, 1.0, 1.0)
+    latch = color_to_rgba(0.85, 0.85, 0.85)
+
+    # Case body
+    draw_rect(img, 2, 3, 20, 18, case)
+    draw_rect(img, 2, 3, 20, 2, case_light)
+    draw_rect(img, 2, 3, 2, 18, case_light)
+    draw_rect(img, 20, 3, 2, 18, case_dark)
+    draw_rect(img, 2, 19, 20, 2, case_dark)
+
+    # White cross
+    draw_rect(img, 8, 7, 8, 8, cross)
+    draw_rect(img, 6, 9, 12, 4, cross)
+
+    # Latch
+    draw_rect(img, 18, 10, 2, 4, latch)
+
+    save_png(img, os.path.join(OUTPUT_DIR, "health_kit.png"))
+
+
+# ============================================================================
 # MAIN
 # ============================================================================
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    
+
     print("=== Starting sprite generation ===")
-    
+
     generate_player_sprites()
     generate_zombie_cat_sprites()
     generate_wall_tiles()
     generate_coin_sprite()
     generate_exit_sprite()
     generate_bullet_sprite()
-    
+    generate_ammo_box_sprite()
+    generate_medicine_sprite()
+    generate_health_kit_sprite()
+
     print("=== Sprite generation complete! ===")
     print(f"All sprites saved to: {OUTPUT_DIR}/")
 

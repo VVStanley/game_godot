@@ -57,14 +57,20 @@ Each variant has tattered ears, glowing eyes, rot patches, and zombie drool. Ran
 ## Что сделано
 
 - **Процедурная генерация лабиринта** — каждый запуск создаётся новый лабиринт алгоритмом DFS (Recursive Backtracker).
+- **Рост лабиринта с уровнем** — уровень 1: 31×21, уровень 10: 49×39. Настраивается через `Settings.maze_base_cols`, `maze_base_rows`, `maze_growth_per_level`.
+- **Комнаты 3×3 и 2×2** — после DFS вырезаются комнаты (2 больших 3×3, 1 маленькая 2×2) с проходами. Можно отключить через `Settings.maze_rooms_enabled`.
+- **Циклы (доп. проходы)** — после генерации добавляются петли в лабиринте (3 + level шт.) — предотвращают блокировку пути зомби.
+- **Доп. проходы (shortcuts)** — 15 прямых участков стен за уровень удалено (только стены с полом с обеих сторон, не углы).
+- **Расширенная запретная зона спавна** — враги не спавнятся в радиусе 4 клеток от игрока (`Settings.enemy_spawn_block_radius`).
 - **Игрок** — перемещение по лабиринту (WASD / стрелки), столкновения со стенами.
 - **Монеты** — разбросаны по лабиринту, собираются при касании, подсчёт очков.
 - **Враги** — красные круги, перемещаются случайным образом, могут подбирать монеты.
-- **Стрельба** — игрок стреляет пулями в направлении последнего движения (пробел), ограниченное количество патронов с авторегенерацией.
+- **Стрельба** — игрок стреляет пулями в направлении последнего движения (пробел), 10 стартовых патронов **без авторегенерации**. Патроны пополняются подбором коробок из лабиринта. Патроны **переносятся между уровнями** и могут превышать 10, но каждый уровень начинается минимум с 10.
+- **Предметы-подбирашки** — по уровню разбросаны коробки с патронами (+3 патрона), лекарства (снижают урон от заражения до 20% на весь уровень) и аптечки (+25% HP).
 - **Система здоровья врагов** — враги погибают с 2 попаданий (настраивается).
 - **Система здоровья игрока и заражения** — игрок имеет 100 HP; при близости врага заражается, HP постепенно уменьшается на 30% (30 очков) за полный цикл заражения (5 сек); во время заражения HUD становится красным и жирным; после заражения — иммунитет на 2 сек (`infection_cooldown_time`); при 0 HP — перезапуск уровня со штрафом -10% очков.
 - **Выход** — дверь/портал, открывается (становится зелёным) только после сбора всех монет.
-- **HUD** — отображение текущего уровня, монет (собрано / всего на карте), оставшихся врагов, суммарных очков, боезапаса с таймером перезарядки и HP (зелёный/красный при заражении).
+- **HUD** — отображение текущего уровня, монет (собрано / всего на карте), оставшихся врагов, суммарных очков, боезапаса и HP (зелёный/красный при заражении).
 - **Система уровней (10 уровней)** — для перехода на следующий уровень нужно собрать все монеты; убивать врагов необязательно. Очки за убийства врагов сохраняются между уровнями. С каждым уровнем растёт количество монет и врагов.
 - **Экран завершения уровня** — при выходе на собранном уровне показывается сообщение с текущим счётом, затем загружается следующий уровень.
 - **Финальный экран победы** — после прохождения 10-го уровня появляется итоговый счёт.
@@ -72,7 +78,8 @@ Each variant has tattered ears, glowing eyes, rot patches, and zombie drool. Ran
 - **Камера (Camera2D)** — камера плавно следует за игроком; весь лабиринт не виден целиком, что создаёт эффект исследования.
 - **Увеличен размер окна** — viewport изменён с `992×672` на `1280×720` (`project.godot`), чтобы лабиринт не помещался на экране целиком.
 - **Зум камеры** — камера отдалена от игрока через `Settings.camera_zoom` (по умолчанию 0.75), чтобы видеть больше лабиринта.
-- **Уменьшенный размер лабиринта** — для ускорения тестирования лабиринт уменьшен (21×15 клеток), настраивается через `MAZE_COLS` / `MAZE_ROWS` в `Main.gd`.
+- **Динамический размер лабиринта** — уровень 1: 31×21, уровень 10: 49×39. Настраивается через `Settings.maze_base_cols`, `maze_base_rows`, `maze_growth_per_level`. `MAZE_COLS`/`MAZE_ROWS` заменены на `_maze_cols`/`_maze_rows` (переменные, вычисляются в `_compute_maze_size()`).
+- **Выход в противоположном углу** — `_exit_cell` вычисляется динамически как `(cell_cols - 1, cell_rows - 1)` от спавна игрока.
 - **Звуковая система** — процедурно генерируемые звуковые эффекты (выстрел, шаги) через `AudioStreamGenerator`, без внешних аудиофайлов.
 - **Централизованные настройки** — все параметры игры вынесены в `Settings/Settings.gd` (скорости, размеры, цвета, аудио, количество уровней, параметры миникарты, здоровье/заражение и т.д.).
 - **LevelManager (autoload)** — хранит текущий уровень и суммарные очки между перезапусками сцены.
@@ -100,14 +107,20 @@ Qwen_text1/
 │   ├── Coin.tscn                 # Coin collectible (Node2D)
 │   ├── Exit.tscn                 # Exit door/portal (Area2D)
 │   ├── Bullet.tscn               # Projectile (Area2D)
-│   └── Enemy.tscn                # Roaming enemy (CharacterBody2D)
+│   ├── Enemy.tscn                # Roaming enemy (CharacterBody2D)
+│   ├── AmmoPickup.tscn           # Ammo box pickup (Node2D)
+│   ├── Medicine.tscn             # Medicine vial pickup (Node2D)
+│   └── HealthKit.tscn            # Health kit pickup (Node2D)
 ├── Scripts/
-│   ├── Main.gd                   # Level controller, maze generation (DFS), camera, HUD, spawning, multi-level logic
-│   ├── Player.gd                 # WASD movement, wall sliding, shooting, ammo regen, coin detection, step sounds
+│   ├── Main.gd                   # Level controller, maze generation (DFS), camera, HUD, spawning, multi-level logic, pickups
+│   ├── Player.gd                 # WASD movement, wall sliding, shooting, health/infection, pickup detection
 │   ├── Coin.gd                   # Coin visual/collision setup from Settings
 │   ├── Exit.gd                   # Exit logic — locked/unlocked state, player detection
 │   ├── Bullet.gd                 # Projectile movement, lifetime, wall/enemy collision
-│   └── Enemy.gd                  # Random-walk AI, coin collection, health, flash-on-hit, death signal
+│   ├── Enemy.gd                  # Random-walk AI, coin collection, health, flash-on-hit, death signal
+│   ├── AmmoPickup.gd             # Ammo box visual/collision setup
+│   ├── Medicine.gd               # Medicine vial visual/collision setup
+│   └── HealthKit.gd              # Health kit visual/collision setup
 └── Assets/                       # Sprite assets (PNG files, pixel-art style)
 ```
 
@@ -135,9 +148,12 @@ Main (Node2D) — Main.gd
   ├─ Player                       (CharacterBody2D, runtime-spawned)
   ├─ Coin × N                     (Node2D, runtime-spawned)
   ├─ Enemy × M                    (CharacterBody2D, runtime-spawned)
+  ├─ AmmoPickup × K               (Node2D, runtime-spawned)
+  ├─ Medicine × L                 (Node2D, runtime-spawned)
+  ├─ HealthKit × H                (Node2D, runtime-spawned)
   ├─ Exit                         (Area2D, runtime-spawned)
   ├─ HUD (Label)                  (level, coins, enemies, score)
-  ├─ Ammo (Label)                 (ammo count + reload timer)
+  ├─ Ammo (Label)                 (ammo count)
   └─ HP (Label)                   (health points, green/red when infected)
 ```
 
@@ -186,6 +202,9 @@ Exit (Area2D) — Exit.gd
 | Player   | `bullet_fired`       | `Main._on_bullet_fired`                  | Track bullet for hit events           |
 | Player   | `health_changed`     | `Main._on_health_changed`                | Player HP changed or infected         |
 | Player   | `player_died`        | `Main._on_player_died`                   | Player HP reached 0                   |
+| Player   | `ammo_picked_up`     | `Main._on_ammo_picked_up`                | Player collected ammo box             |
+| Player   | `medicine_picked_up` | `Main._on_medicine_picked_up`            | Player collected medicine vial        |
+| Player   | `health_kit_picked_up` | `Main._on_health_kit_picked_up`        | Player collected health kit           |
 | Bullet   | `hit_enemy`          | `Main._on_bullet_hit`                    | Apply damage to enemy                 |
 | Enemy    | `enemy_collected_coin`| `Main._on_enemy_collected_coin`         | Enemy ate a coin                      |
 | Enemy    | `enemy_died`         | `Main._on_enemy_died`                    | Award score, update enemy count       |
@@ -213,9 +232,13 @@ Exit (Area2D) — Exit.gd
 
 ### Maze Generation
 - Algorithm: **Recursive Backtracker (DFS)** on a grid of cells.
-- Grid size: `MAZE_COLS=21`, `MAZE_ROWS=15` (must be **odd**).
+- Grid size: dynamic — level 1 is `_maze_cols=31`, `_maze_rows=21` (must be **odd**). Grows by `Settings.maze_growth_per_level` per level.
 - Cell-to-grid mapping: cell `(cx, cy)` → grid `(cx*2+1, cy*2+1)`.
-- Dead ends removed: after generation, each cell with exactly 1 passage has a wall carved to an adjacent open cell (if available).
+- **Rooms**: after DFS, rooms are carved if `Settings.maze_rooms_enabled` is true — 2 rooms of 3×3 (`maze_room_count`) + 1 room of 2×2 (`maze_room_small_count`), each with at least 1 doorway.
+- **Dead ends removed**: after generation, each cell with exactly 1 passage has a wall carved to an adjacent open cell (if available).
+- **Cycles added**: `3 + level` extra passages carved between already-connected cells, creating loops to prevent blocked paths.
+- **Extra passages**: `maze_extra_passages_base` (15) straight wall segments removed per level — only walls with floor on both sides (horizontal or vertical), never corners. Protected: spawn and exit zones.
+- Spawn/exit: `_player_spawn = (0, 0)`, `_exit_cell = (cell_cols-1, cell_rows-1)` — computed dynamically.
 
 ### Camera
 - Follows player via `_camera.global_position = _player.global_position` in `_process()`.
@@ -243,22 +266,26 @@ Exit (Area2D) — Exit.gd
 - Pick radius: `Settings.player_radius + Settings.coin_radius`.
 - Enemies also use distance-based checks (same formula).
 
-### Ammo Regeneration
-- Uses accumulator: `_regen_accumulator += delta`.
-- When accumulator >= `Settings.ammo_regen_time`, +1 ammo (capped at `Settings.max_ammo`).
+### Ammo
+- No regeneration — ammo is finite, replenished only by picking up ammo boxes.
+- Player starts with `Settings.max_ammo` (10).
+- Ammo boxes grant `Settings.ammo_pickup_amount` (3) per pickup.
 
 ### Enemy AI
 - Picks random walkable position within 300px radius.
 - Falls back to any walkable position if none nearby.
 - Direction change timeout: `Settings.enemy_change_dir_time`.
 - Uses `move_and_slide()` for wall collision.
+- Spawn exclusion: cannot appear within `Settings.enemy_spawn_block_radius` cells of player spawn.
 
 ### Multi-Level System
 - `LevelManager` persists `current_level` and `total_score` across scene reloads.
 - Level progression: `advance_level()` returns `false` at max level.
 - After level 10: victory screen → `reset_progress()` → scene reload → level 1.
 - Coin count: `base_coin_count + (level-1) * 2`.
-- Enemy count: `base_enemy_count + (level-1) / 2` (integer division).
+- Enemy count: `base_enemy_count + (level-1)` (scales faster to match growing maze).
+- Ammo box count: `ammo_box_count + level / 2` (scales with level).
+- Maze size: `maze_base_cols/rows + (level-1) * maze_growth_per_level`.
 
 ### Sound System
 - Procedural sine waves with exponential decay.

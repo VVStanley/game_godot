@@ -40,10 +40,15 @@ Collect **all coins** scattered across the maze. The exit door turns **green** w
 
 ### Shooting
 - Press **Space** to fire a bullet toward your last movement direction.
-- You start with **5 bullets**.
-- Bullets regenerate over time — settings control how fast.
+- You start with **5 bullets** — no regeneration.
+- Find **ammo boxes** scattered in the maze to replenish (+3 per box, configurable).
 - Enemies die in **2 hits** (configurable).
 - Bullets disappear on wall impact.
+
+### Pickups
+- **Ammo boxes** — brown crates with bullet icon. Pick up for +3 ammo.
+- **Medicine vials** — green vials with a white cross. Reduces infection damage to 20% for the rest of the level.
+- **Health kits** — red cases with a white cross. Restores 25% of max HP (25 HP).
 
 ### Health & Infection
 - You have **100 HP** (configurable via `Settings.player_max_hp`).
@@ -60,7 +65,11 @@ Collect **all coins** scattered across the maze. The exit door turns **green** w
 
 ### Maze
 - **Procedurally generated** each game via Recursive Backtracker (DFS).
+- **Grows with each level** — starts at 31×21 tiles (level 1), expands to 49×39 by level 10.
 - Dead ends are removed so there are always **multiple paths**.
+- **Extra passage cycles** are carved each level — creating loops so enemies can't block your path.
+- **Extra shortcuts** — 15 straight wall segments removed per level (never corners, only walls with floor on both sides) for more routes.
+- **3×3 rooms** (2 per level) and **2×2 rooms** (1 per level) — open spaces with coins and pickups. Can be disabled via settings.
 - Walls are **solid** — the player cannot pass through them or leave the maze.
 
 ---
@@ -85,8 +94,21 @@ All game parameters live in **`Settings/Settings.gd`**.
 |--------------------|------|---------|--------------------------------------------|
 | `max_level`        | int  | `10`    | Total number of levels.                    |
 | `base_coin_count`  | int  | `8`     | Coins on level 1, +2 per subsequent level. |
-| `base_enemy_count` | int  | `3`     | Enemies on level 1, +1 every 2 levels.     |
+| `base_enemy_count` | int  | `3`     | Enemies on level 1, +1 per level.          |
 | `score_per_kill`   | int  | `5`     | Points awarded per enemy killed.           |
+
+### Maze
+| Variable                 | Type   | Default | Description                                      |
+|--------------------------|--------|---------|--------------------------------------------------|
+| `maze_base_cols`         | int    | `31`    | Maze columns for level 1 (odd).                  |
+| `maze_base_rows`         | int    | `21`    | Maze rows for level 1 (odd).                     |
+| `maze_growth_per_level`  | int    | `2`     | Additional cols/rows per level (even).           |
+| `maze_cycles_per_level`  | int    | `1`     | Extra passage loops carved per level.            |
+| `enemy_spawn_block_radius`| int   | `4`     | Cells around spawn where enemies cannot appear.  |
+| `maze_room_count`        | int    | `2`     | Number of 3×3 rooms carved per level.            |
+| `maze_room_small_count`  | int    | `1`     | Number of 2×2 rooms carved per level.            |
+| `maze_rooms_enabled`     | bool   | `true`  | Enable room carving (true = rooms, false = none).|
+| `maze_extra_passages_base`| int   | `15`    | Straight wall segments removed per level (shortcuts). |
 
 ### Player
 | Variable          | Type   | Default | Description                          |
@@ -104,11 +126,23 @@ All game parameters live in **`Settings/Settings.gd`**.
 | `infection_cooldown_time`    | float  | `2.0`   | Immunity period after infection ends (seconds).    |
 | `infection_overlap_extra`    | float  | `4.0`   | Extra overlap distance for infection trigger (px). |
 
+### Pickups
+| Variable                     | Type   | Default | Description                                   |
+|------------------------------|--------|---------|-----------------------------------------------|
+| `ammo_pickup_amount`         | int    | `3`     | Ammo granted per ammo box pickup.             |
+| `ammo_box_count`             | int    | `2`     | Ammo boxes spawned per level.                 |
+| `medicine_count`             | int    | `1`     | Medicine vials spawned per level.             |
+| `medicine_damage_multiplier` | float  | `0.2`   | Infection damage multiplier with medicine.    |
+| `health_kit_count`           | int    | `1`     | Health kits spawned per level.                |
+| `health_kit_restore_fraction`| float  | `0.25`  | Fraction of max HP restored by health kit.    |
+| `pickup_radius`              | float  | `12.0`  | Pickup collision radius (px).                 |
+
 ### Shooting
 | Variable                | Type   | Default | Description                              |
 |-------------------------|--------|---------|------------------------------------------|
 | `max_ammo`              | int    | `5`     | Maximum bullets.                         |
-| `ammo_regen_time`       | float  | `1.5`   | Seconds to regenerate **one** bullet.    |
+| `ammo_pickup_amount`    | int    | `3`     | Ammo granted per ammo box pickup.        |
+| `ammo_box_count`        | int    | `2`     | Number of ammo boxes spawned per level.  |
 | `bullet_speed`          | float  | `400.0` | Bullet velocity (px/s).                  |
 | `bullet_radius`         | float  | `4.0`   | Bullet collision + visual size.          |
 | `bullet_colour`         | Color  | `RED`   | Bullet colour.                           |
