@@ -11,13 +11,19 @@ extends Node2D
 
 # ---------------------------------------------------------------------------
 # Grid constants — must be odd for the cell/wall layout to work.
+# Reduced from 41x31 to 27x21 for a more compact maze.
 # ---------------------------------------------------------------------------
-const MAZE_COLS: int = 21
-const MAZE_ROWS: int = 15
+const MAZE_COLS: int = 27
+const MAZE_ROWS: int = 21
 
 # Cell coordinates (not grid).  Cell (0,0) → grid (1,1).
+# Player spawns at top-left corner cell.
 const PLAYER_SPAWN: Vector2i = Vector2i(0, 0)
-const EXIT_CELL: Vector2i = Vector2i(9, 6)
+# Exit position in cell coordinates (will be adjusted dynamically).
+var EXIT_CELL: Vector2i = Vector2i(19, 14)
+
+# Center room size (must be odd for proper maze alignment).
+const CENTER_ROOM_SIZE: int = 3
 
 # ---------------------------------------------------------------------------
 # State
@@ -145,7 +151,17 @@ func _generate_maze() -> void:
 			visited[nxt.y][nxt.x] = true
 			stack.append(nxt)
 
+	# Remove dead ends to create multiple paths.
 	_remove_dead_ends(rng)
+
+	# Carve holes in long walls for more maneuvering space.
+	_carve_holes_in_long_walls(rng)
+
+	# Generate two center rooms with multiple exits.
+	_generate_center_rooms(rng)
+
+	# Set exit position dynamically opposite to player spawn.
+	_set_exit_position()
 
 
 func _set_cell(cell: Vector2i) -> void:
@@ -171,6 +187,10 @@ func _remove_dead_ends(rng: RandomNumberGenerator) -> void:
 			if cell == PLAYER_SPAWN or cell == EXIT_CELL:
 				continue
 			if _count_passages(cell) != 1:
+				continue
+
+			# Only carve ~50% of dead ends to keep some maze challenge.
+			if rng.randf() < 0.5:
 				continue
 
 			var gc: int = cx * 2 + 1
@@ -206,6 +226,192 @@ func _count_passages(cell: Vector2i) -> int:
 		if gc + off > 0 and gc + off < MAZE_COLS - 1 and _maze[gr][gc + off] == 0:
 			count += 1
 	return count
+
+
+## Carves holes in long wall segments to create more maneuvering space.
+## Scans each row and column for consecutive wall blocks longer than
+## Settings.min_wall_length_for_hole, then removes the middle block
+## only if it connects to walkable areas on BOTH perpendicular sides.
+## NEVER carves holes in the perimeter boundary walls.
+## NEVER carves wall blocks that are part of T-junctions or intersections.
+func _carve_holes_in_long_walls(rng: RandomNumberGenerator) -> void:
+	var min_length: int = Settings.min_wall_length_for_hole
+
+	# Scan rows for long horizontal walls.
+	# Skip row 0 and row MAZE_ROWS-1 (top/bottom perimeter walls).
+	for row in range(1, MAZE_ROWS - 1):
+		var wall_start: int = -1
+		var wall_length: int = 0
+		for col in range(MAZE_COLS):
+			if _maze[row][col] == 1:
+				if wall_start == -1:
+					wall_start = col
+					wall_length = 1
+				else:
+					wall_length += 1
+			else:
+				if wall_length >= min_length:
+					# Carve hole approximately in the middle.
+					var hole_pos: int = wall_start + wall_length / 2
+					# Ensure we don't carve at the very edge.
+					if hole_pos > 0 and hole_pos < MAZE_COLS - 1:
+						# Only carve if there are passages on BOTH perpendicular sides.
+						# This ensures we carve through-passage holes only, not T-junctions.
+						var has_passage_above: bool = (row > 0 and _maze[row - 1][hole_pos] == 0)
+						var has_passage_below: bool = (row < MAZE_ROWS - 1 and _maze[row + 1][hole_pos] == 0)
+						if has_passage_above and has_passage_below:
+							_maze[row][hole_pos] = 0
+				wall_start = -1
+				wall_length = 0
+		# Check wall segment at end of row.
+		if wall_length >= min_length:
+			var hole_pos: int = wall_start + wall_length / 2
+			if hole_pos > 0 and hole_pos < MAZE_COLS - 1:
+				var has_passage_above: bool = (row > 0 and _maze[row - 1][hole_pos] == 0)
+				var has_passage_below: bool = (row < MAZE_ROWS - 1 and _maze[row + 1][hole_pos] == 0)
+				if has_passage_above and has_passage_below:
+					_maze[row][hole_pos] = 0
+
+	# Scan columns for long vertical walls.
+	# Skip col 0 and col MAZE_COLS-1 (left/right perimeter walls).
+	for col in range(1, MAZE_COLS - 1):
+		var wall_start: int = -1
+		var wall_length: int = 0
+		for row in range(MAZE_ROWS):
+			if _maze[row][col] == 1:
+				if wall_start == -1:
+					wall_start = row
+					wall_length = 1
+				else:
+					wall_length += 1
+			else:
+				if wall_length >= min_length:
+					var hole_pos: int = wall_start + wall_length / 2
+					if hole_pos > 0 and hole_pos < MAZE_ROWS - 1:
+						# Only carve if there are passages on BOTH perpendicular sides.
+						var has_passage_left: bool = (col > 0 and _maze[hole_pos][col - 1] == 0)
+						var has_passage_right: bool = (col < MAZE_COLS - 1 and _maze[hole_pos][col + 1] == 0)
+						if has_passage_left and has_passage_right:
+							_maze[hole_pos][col] = 0
+				wall_start = -1
+				wall_length = 0
+		# Check wall segment at end of column.
+		if wall_length >= min_length:
+			var hole_pos: int = wall_start + wall_length / 2
+			if hole_pos > 0 and hole_pos < MAZE_ROWS - 1:
+				var has_passage_left: bool = (col > 0 and _maze[hole_pos][col - 1] == 0)
+				var has_passage_right: bool = (col < MAZE_COLS - 1 and _maze[hole_pos][col + 1] == 0)
+				if has_passage_left and has_passage_right:
+					_maze[hole_pos][col] = 0
+
+
+## Generates two 3x3 rooms in the maze with at least 2 exits each.
+## Rooms are placed at different positions to add variety.
+func _generate_center_rooms(rng: RandomNumberGenerator) -> void:
+	# Generate first room at center.
+	_generate_room_at(rng, MAZE_COLS / 2, MAZE_ROWS / 2, 2)
+
+	# Generate second room at a different position (upper-left quadrant).
+	_generate_room_at(rng, MAZE_COLS / 4, MAZE_ROWS / 4, 2)
+
+
+## Generates a single 3x3 room at the specified center position with the given number of exits.
+func _generate_room_at(rng: RandomNumberGenerator, center_col: int, center_row: int, num_exits: int) -> void:
+	var room_size: int = CENTER_ROOM_SIZE
+	var half_room: int = room_size / 2
+
+	# Align to nearest odd grid positions.
+	if center_col % 2 == 0:
+		center_col -= 1
+	if center_row % 2 == 0:
+		center_row -= 1
+
+	# Calculate room boundaries.
+	var room_left: int = center_col - half_room
+	var room_right: int = center_col + half_room
+	var room_top: int = center_row - half_room
+	var room_bottom: int = center_row + half_room
+
+	# Ensure room is within bounds.
+	room_left = max(1, room_left)
+	room_right = min(MAZE_COLS - 2, room_right)
+	room_top = max(1, room_top)
+	room_bottom = min(MAZE_ROWS - 2, room_bottom)
+
+	# Carve out the room (set all tiles to walkable).
+	for row in range(room_top, room_bottom + 1):
+		for col in range(room_left, room_right + 1):
+			_maze[row][col] = 0
+
+	# Create exits from the room edges to nearest walkable paths.
+	var exits_created: int = 0
+	var directions: Array[Vector2i] = [
+		Vector2i(0, -1),  # up
+		Vector2i(0, 1),   # down
+		Vector2i(-1, 0),  # left
+		Vector2i(1, 0),   # right
+	]
+
+	# Shuffle directions for randomness.
+	directions.shuffle()
+
+	for dir in directions:
+		if exits_created >= num_exits:
+			break
+
+		# Try to create exit from room edge in this direction.
+		var edge_col: int = center_col
+		var edge_row: int = center_row
+
+		if dir.x == -1:  # left
+			edge_col = room_left
+		elif dir.x == 1:  # right
+			edge_col = room_right
+		elif dir.y == -1:  # up
+			edge_row = room_top
+		elif dir.y == 1:  # down
+			edge_row = room_bottom
+
+		# Find nearest walkable cell in this direction.
+		var search_col: int = edge_col + dir.x
+		var search_row: int = edge_row + dir.y
+
+		# Search outward until we find a walkable cell or hit boundary.
+		var max_search: int = 10
+		var found: bool = false
+		for i in range(max_search):
+			if search_col < 0 or search_col >= MAZE_COLS or \
+			   search_row < 0 or search_row >= MAZE_ROWS:
+				break
+
+			if _maze[search_row][search_col] == 0:
+				found = true
+				break
+
+			search_col += dir.x
+			search_row += dir.y
+
+		if found:
+			# Carve passage from room edge to the found walkable cell.
+			var carve_col: int = edge_col
+			var carve_row: int = edge_row
+			while carve_col != search_col or carve_row != search_row:
+				if carve_col >= 0 and carve_col < MAZE_COLS and \
+				   carve_row >= 0 and carve_row < MAZE_ROWS:
+					_maze[carve_row][carve_col] = 0
+				carve_col += sign(search_col - carve_col)
+				carve_row += sign(search_row - carve_row)
+			exits_created += 1
+
+
+## Sets the exit position dynamically to be opposite the player spawn.
+## Since player spawns at top-left (0,0), exit will be at bottom-right.
+func _set_exit_position() -> void:
+	var cell_cols: int = (MAZE_COLS - 1) / 2
+	var cell_rows: int = (MAZE_ROWS - 1) / 2
+
+	# Place exit in opposite corner from player spawn.
+	EXIT_CELL = Vector2i(cell_cols - 1, cell_rows - 1)
 
 
 # =====================================================================
@@ -522,6 +728,7 @@ func _create_minimap() -> void:
 	_minimap.maze_data = _maze.duplicate(true)
 	_minimap.scale_factor = scale_factor
 	_minimap.exit_unlocked = false
+	_minimap.exit_cell = EXIT_CELL
 
 	var vp_size: Vector2 = get_viewport_rect().size
 	_minimap.position = Vector2(
@@ -567,6 +774,7 @@ class MinimapControl extends Control:
 	var scale_factor: float = 1.0
 	var player_pos: Vector2 = Vector2.ZERO
 	var exit_unlocked: bool = false
+	var exit_cell: Vector2i = Vector2i(19, 14)  # Default, will be set from Main
 
 	# Fog of war — 2D grid: true = revealed, false = hidden.
 	var _revealed: Array = []
@@ -633,10 +841,8 @@ class MinimapControl extends Control:
 		draw_rect(dot_rect, Settings.player_colour)
 
 		# Exit marker — grey when locked, green when unlocked.
-		var exit_cell_x: float = 9.0
-		var exit_cell_y: float = 6.0
-		var exit_grid_x: float = exit_cell_x * 2.0 + 1.0
-		var exit_grid_y: float = exit_cell_y * 2.0 + 1.0
+		var exit_grid_x: float = float(exit_cell.x * 2 + 1)
+		var exit_grid_y: float = float(exit_cell.y * 2 + 1)
 		var exit_marker: Rect2 = Rect2(
 			exit_grid_x * ts * scale_factor - dot_size / 2.0,
 			exit_grid_y * ts * scale_factor - dot_size / 2.0,

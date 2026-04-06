@@ -161,6 +161,10 @@ var wall_tile_size: int = 32
 ## Wall tile colour.
 var wall_colour: Color = Color(0.35, 0.35, 0.45)
 
+## Minimum wall length to create a hole in the middle (in blocks).
+## Walls longer than this will have a gap carved approximately in the middle.
+var min_wall_length_for_hole: int = 5
+
 # ===================== AUDIO =====================
 
 ## Master volume (0.0 – 1.0).
